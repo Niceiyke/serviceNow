@@ -1,41 +1,48 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
-import { Button } from '@/components/ui/button';
+import { DashboardLayout } from '@/components/layout/dashboard-layout';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<any>(null);
-  const router = useRouter();
+  const [stats, setStats] = useState({ active: 0, resolved: 0 });
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchStats = async () => {
       try {
-        const response = await api.get('/auth/me'); // Wait, I haven't implemented /auth/me yet.
-        // Actually I'll implement it now in the backend.
-        setUser(response.data);
-      } catch (err) {
-        // router.push('/login');
-      }
+        const response = await api.get('/incidents');
+        const incidents = response.data;
+        setStats({
+          active: incidents.filter((i: any) => i.status !== 'CLOSED' && i.status !== 'RESOLVED').length,
+          resolved: incidents.filter((i: any) => i.status === 'RESOLVED').length,
+        });
+      } catch (err) {}
     };
-    fetchUser();
-  }, [router]);
+    fetchStats();
+  }, []);
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      {user && (
-        <div className="mt-4 p-4 bg-white shadow rounded">
-          <p>Welcome, {user.full_name}!</p>
-          <p>Email: {user.email}</p>
-          <p>Role: {user.role}</p>
-        </div>
-      )}
-      <Button onClick={() => {
-        localStorage.removeItem('token');
-        router.push('/login');
-      }} className="mt-4">Logout</Button>
-    </div>
+    <DashboardLayout>
+      <h1 className="text-3xl font-bold mb-8">Dashboard Overview</h1>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-gray-500">Active Incidents</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.active}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-gray-500">Recently Resolved</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold">{stats.resolved}</div>
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
   );
 }
