@@ -22,7 +22,7 @@ services:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@service-now-db:5432/${POSTGRES_DB:-service_now}
+      DATABASE_URL: postgresql://postgres:postgres@service-now-db:5432/service_now
       SECRET_KEY: ${SECRET_KEY:-supersecretkey}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30
@@ -54,7 +54,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://api-service-now.wordlyte.com/api/v1
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
     ports:
       - "3001:3000"
     depends_on:
