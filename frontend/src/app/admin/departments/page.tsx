@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { toast } from 'sonner';
 import { 
   Table, 
   TableBody, 
@@ -36,9 +37,10 @@ export default function AdminDepartmentsPage() {
     try {
       await api.post('/departments/', { name: newDeptName });
       setNewDeptName('');
+      toast.success('Department created successfully');
       fetchDepts();
     } catch (err) {
-      alert('Failed to create department. Make sure you are an ADMIN.');
+      toast.error('Failed to create department. Make sure you are an ADMIN.');
     }
   };
 
@@ -46,9 +48,10 @@ export default function AdminDepartmentsPage() {
     try {
       await api.post(`/departments/${deptId}/categories`, { name: newCatName[deptId] });
       setNewCatName({ ...newCatName, [deptId]: '' });
+      toast.success('Category added successfully');
       fetchDepts();
     } catch (err) {
-      alert('Failed to create category');
+      toast.error('Failed to add category');
     }
   };
 

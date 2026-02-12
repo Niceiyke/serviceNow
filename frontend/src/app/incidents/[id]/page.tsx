@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 import { 
   Select, 
   SelectContent, 
@@ -46,8 +47,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     try {
       const response = await api.patch(`/incidents/${resolvedParams.id}`, { status: newStatus });
       setIncident(response.data);
+      toast.success(`Status updated to ${newStatus}`);
     } catch (err) {
-      alert('Failed to update status');
+      toast.error('Failed to update status');
     }
   };
 
@@ -61,8 +63,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       });
       setComments([...comments, response.data as never]);
       setNewComment('');
+      toast.success('Comment posted');
     } catch (err) {
-      alert('Failed to post comment');
+      toast.error('Failed to post comment');
     }
   };
 

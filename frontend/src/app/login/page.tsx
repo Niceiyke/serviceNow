@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -27,8 +28,10 @@ export default function LoginPage() {
       });
 
       localStorage.setItem('token', response.data.access_token);
+      toast.success('Successfully logged in');
       router.push('/dashboard');
     } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to login');
       setError(err.response?.data?.detail || 'Failed to login');
     }
   };

@@ -55,7 +55,7 @@ def create_department(
     db: Session = Depends(get_db),
     current_user = Depends(deps.get_current_active_user),
 ):
-    if str(current_user.role) != UserRole.ADMIN.value:
+    if current_user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     db_obj = Department(name=department_in.name, description=department_in.description)
@@ -71,7 +71,7 @@ def create_category(
     db: Session = Depends(get_db),
     current_user = Depends(deps.get_current_active_user),
 ):
-    if current_user.role != UserRole.ADMIN:
+    if current_user.role != "ADMIN":
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     db_obj = Category(

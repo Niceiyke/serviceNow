@@ -7,7 +7,38 @@ from app.models.models import Incident, IncidentStatus, IncidentPriority, User, 
 from pydantic import BaseModel, UUID4
 from datetime import datetime
 
+from sqlalchemy import func
+
 router = APIRouter()
+
+@router.get("/stats")
+def get_incident_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    if current_user.role not in ["ADMIN", "MANAGER"]:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    # 1. Total by Status
+    status_counts = db.query(
+        Incident.status, func.count(Incident.id)
+    ).group_by(Incident.status).all()
+    
+    # 2. Total by Department
+    dept_counts = db.query(
+        Department.name, func.count(Incident.id)
+    ).join(Incident, Incident.department_id == Department.id).group_by(Department.name).all()
+    
+    # 3. Total by Priority
+    priority_counts = db.query(
+        Incident.priority, func.count(Incident.id)
+    ).group_by(Incident.priority).all()
+
+    return {
+        "by_status": {s: c for s, c in status_counts},
+        "by_department": {d: c for d, c in dept_counts},
+        "by_priority": {p: d for p, d in priority_counts}
+    }
 
 class IncidentBase(BaseModel):
     title: str
