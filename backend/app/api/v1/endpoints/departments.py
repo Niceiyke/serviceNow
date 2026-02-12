@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.api import deps
@@ -10,7 +10,7 @@ router = APIRouter()
 
 class CategoryBase(BaseModel):
     name: str
-    description: str = None
+    description: Optional[str] = None
 
 class CategoryInDB(CategoryBase):
     id: UUID4
@@ -22,7 +22,7 @@ class CategoryInDB(CategoryBase):
 
 class DepartmentBase(BaseModel):
     name: str
-    description: str = None
+    description: Optional[str] = None
 
 class DepartmentInDB(DepartmentBase):
     id: UUID4
@@ -55,7 +55,7 @@ def create_department(
     db: Session = Depends(get_db),
     current_user = Depends(deps.get_current_active_user),
 ):
-    if current_user.role != UserRole.ADMIN:
+    if str(current_user.role) != UserRole.ADMIN.value:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
     db_obj = Department(name=department_in.name, description=department_in.description)

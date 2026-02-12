@@ -11,7 +11,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const response = await api.get('/incidents');
+        const response = await api.get('/incidents/');
         const incidents = response.data;
         setStats({
           active: incidents.filter((i: any) => i.status !== 'CLOSED' && i.status !== 'RESOLVED').length,

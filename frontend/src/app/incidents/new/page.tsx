@@ -30,7 +30,7 @@ export default function NewIncidentPage() {
   useEffect(() => {
     const fetchDepts = async () => {
       try {
-        const response = await api.get('/departments');
+        const response = await api.get('/departments/');
         setDepartments(response.data);
       } catch (err) {}
     };
@@ -53,7 +53,7 @@ export default function NewIncidentPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await api.post('/incidents', {
+      await api.post('/incidents/', {
         title,
         description,
         priority,

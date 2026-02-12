@@ -22,7 +22,7 @@ export default function AdminDepartmentsPage() {
 
   const fetchDepts = async () => {
     try {
-      const response = await api.get('/departments');
+      const response = await api.get('/departments/');
       setDepartments(response.data);
     } catch (err) {}
   };
@@ -34,7 +34,7 @@ export default function AdminDepartmentsPage() {
   const handleCreateDept = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/departments', { name: newDeptName });
+      await api.post('/departments/', { name: newDeptName });
       setNewDeptName('');
       fetchDepts();
     } catch (err) {

@@ -22,7 +22,7 @@ export default function IncidentsPage() {
   useEffect(() => {
     const fetchIncidents = async () => {
       try {
-        const response = await api.get('/incidents');
+        const response = await api.get('/incidents/');
         setIncidents(response.data);
       } catch (err) {}
     };
