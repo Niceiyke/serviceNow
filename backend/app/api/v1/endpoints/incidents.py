@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.database import get_db
-from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog
+from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department
 from pydantic import BaseModel, UUID4
 from datetime import datetime
 

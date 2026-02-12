@@ -58,7 +58,7 @@ A professional, fullstack incident management system built with **FastAPI**, **N
 - [x] **Mobile Friendly:** Toggleable sidebar and responsive tables.
 - [x] **Dashboard Views:**
     - [x] **Reporter:** High-level status of personal tickets.
-- [ ] **Staff:** Task-oriented list with priority highlighting.
+- [x] **Staff:** Task-oriented list with priority highlighting.
 - [x] **Admin:** System management (Departments/Categories).
 - [x] **Incident Detail:** 3-column view (Details/Comments/Metadata).
 - [x] **Forms:** Validated with Zod and React Hook Form.
@@ -77,9 +77,9 @@ A professional, fullstack incident management system built with **FastAPI**, **N
 ## 8. Implementation TODO List (REMAINING)
 
 ### Phase 4: Interactions, Polish & Management
-- [ ] **User Management:** Build `/admin/users` to manage roles and department assignments.
-- [ ] **Admin Analytics:** Visual charts using Recharts for incident trends and department workloads.
-- [ ] **Staff Experience:** Kanban-style board or priority-sorted feed for staff members.
+- [x] **User Management:** Build `/admin/users` to manage roles and department assignments.
+- [x] **Admin Analytics:** Visual charts using Recharts for incident trends and department workloads.
+- [x] **Staff Experience:** Kanban-style board or priority-sorted feed for staff members.
 - [ ] **Real-time UX:** Implement SWR/React Query for automatic data refreshing.
-- [ ] **UX Polish:** Replace alerts with Toast notifications and add empty states.
-- [ ] **Notifications:** Background tasks for email alerts on status changes.
+- [x] **UX Polish:** Replace alerts with Toast notifications and add empty states.
+- [x] **Notifications:** Background tasks for email alerts on status changes.
