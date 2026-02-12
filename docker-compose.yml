@@ -30,6 +30,32 @@ services:
       - service-now-db
     ports:
       - "8001:8000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.service-now-backend.rule=Host(`api.service-now.wordlyte.com`)"
+      - "traefik.http.routers.service-now-backend.entrypoints=web"
+      - "traefik.http.services.service-now-backend.loadbalancer.server.port=8000"
+
+  service-now-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: service-now-frontend
+    restart: always
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
+    ports:
+      - "3001:3000"
+    depends_on:
+      - service-now-backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.service-now-frontend.rule=Host(`service-now.wordlyte.com`)"
+      - "traefik.http.routers.service-now-frontend.entrypoints=web"
+      - "traefik.http.services.service-now-frontend.loadbalancer.server.port=3000"
 
 volumes:
   postgres-data:
