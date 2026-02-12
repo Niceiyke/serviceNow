@@ -73,7 +73,7 @@ export default function AdminDepartmentsPage() {
         </CardContent>
       </Card>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
