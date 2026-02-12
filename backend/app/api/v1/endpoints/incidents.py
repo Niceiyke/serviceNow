@@ -76,6 +76,12 @@ VALID_TRANSITIONS = {
     IncidentStatus.CANCELLED: [IncidentStatus.OPEN]
 }
 
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+
+def send_status_notification(email: str, incident_key: str, new_status: str):
+    # Conceptual email sending
+    print(f"NOTIFICATION: Sending email to {email} - Incident {incident_key} is now {new_status}")
+
 @router.post("/", response_model=IncidentInDB)
 def create_incident(
     incident_in: IncidentCreate,
@@ -138,6 +144,7 @@ def read_incident(
 def update_incident(
     id: UUID4,
     incident_update: IncidentUpdate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
@@ -172,6 +179,13 @@ def update_incident(
         
         if incident_update.status == IncidentStatus.RESOLVED:
             incident.resolved_at = datetime.utcnow()
+            # Notify reporter
+            background_tasks.add_task(
+                send_status_notification, 
+                incident.reporter.email, 
+                incident.incident_key, 
+                incident_update.status
+            )
         
         incident.status = incident_update.status
 

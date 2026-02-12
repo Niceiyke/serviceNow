@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Incidents', href: '/incidents', icon: Ticket },
+  { label: 'Staff Board', href: '/staff/dashboard', icon: Ticket, roles: ['STAFF', 'MANAGER', 'ADMIN'] },
   { label: 'Departments', href: '/admin/departments', icon: Building, role: 'ADMIN' },
   { label: 'Users', href: '/admin/users', icon: Users, role: 'ADMIN' },
 ];
@@ -49,10 +50,23 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
           </Button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-2">
-          {navItems.map((item) => {
-            if (item.role && user?.role !== item.role) return null;
-            const isActive = pathname === item.href;
+              <nav className="flex-1 px-4 space-y-2">
+
+                {navItems.map((item) => {
+
+                  const hasRole = !item.role && !item.roles || 
+
+                                 (item.role && user?.role === item.role) || 
+
+                                 (item.roles && item.roles.includes(user?.role));
+
+                  
+
+                  if (!hasRole) return null;
+
+                  const isActive = pathname === item.href;
+
+        
             return (
               <Link 
                 key={item.href} 
