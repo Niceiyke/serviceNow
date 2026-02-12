@@ -30,9 +30,17 @@ services:
       - service-now-db
     ports:
       - "8001:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - edge
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.service-now-backend.rule=Host(`api.service-now.wordlyte.com`)"
+      - "traefik.http.routers.service-now-backend.rule=Host(`api-service-now.wordlyte.com`)"
       - "traefik.http.routers.service-now-backend.entrypoints=web"
       - "traefik.http.services.service-now-backend.loadbalancer.server.port=8000"
 
@@ -46,16 +54,23 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1
+      - NEXT_PUBLIC_API_URL=http://api-service-now.wordlyte.com/api/v1
     ports:
       - "3001:3000"
     depends_on:
       - service-now-backend
+    networks:
+      - default
+      - edge
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.service-now-frontend.rule=Host(`service-now.wordlyte.com`)"
       - "traefik.http.routers.service-now-frontend.entrypoints=web"
       - "traefik.http.services.service-now-frontend.loadbalancer.server.port=3000"
+
+networks:
+  edge:
+    external: true
 
 volumes:
   postgres-data:
