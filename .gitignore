@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Databases
+*.sqlite3
+postgres-data/
+
+# OS
+.DS_Store
+Thumbs.db
