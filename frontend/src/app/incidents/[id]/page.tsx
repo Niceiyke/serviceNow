@@ -150,20 +150,20 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase">Reporter ID</label>
-                <p className="text-sm font-mono break-all">{incident.reporter_id}</p>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Reporter</label>
+                <p className="text-sm">{incident.reporter_name || 'N/A'}</p>
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase">Department ID</label>
-                <p className="text-sm font-mono break-all">{incident.department_id}</p>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Department</label>
+                <p className="text-sm">{incident.department_name || 'N/A'}</p>
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase">Category ID</label>
-                <p className="text-sm font-mono break-all">{incident.category_id}</p>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Category</label>
+                <p className="text-sm">{incident.category_name || 'N/A'}</p>
               </div>
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase">Assignee ID</label>
-                <p className="text-sm font-mono break-all">{incident.assignee_id || 'Unassigned'}</p>
+                <label className="text-xs font-semibold text-gray-500 uppercase">Assignee</label>
+                <p className="text-sm">{incident.assignee_name || 'Unassigned'}</p>
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase">Created At</label>

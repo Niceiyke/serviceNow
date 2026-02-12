@@ -39,7 +39,9 @@ export function Sidebar({ user, isOpen, onClose }: SidebarProps) {
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex items-center justify-between p-6">
-          <h1 className="text-xl font-bold">ServiceNow</h1>
+          <Link href="/dashboard">
+            <h1 className="text-xl font-bold hover:text-primary transition-colors cursor-pointer">ServiceNow</h1>
+          </Link>
           <Button 
             variant="ghost" 
             size="icon" 

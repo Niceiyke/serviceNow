@@ -22,11 +22,35 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [newUser, setNewUser] = useState<{
+    email: string;
+    full_name: string;
+    password: string;
+    role: string;
+    department_id: string | null;
+  }>({
+    email: '',
+    full_name: '',
+    password: 'password123',
+    role: 'REPORTER',
+    department_id: null
+  });
 
   const fetchData = async () => {
     try {
@@ -47,6 +71,25 @@ export default function AdminUsersPage() {
     fetchData();
   }, []);
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/users/', newUser);
+      toast.success('User created successfully');
+      setIsCreateOpen(false);
+      setNewUser({
+        email: '',
+        full_name: '',
+        password: 'password123',
+        role: 'REPORTER',
+        department_id: null
+      });
+      fetchData();
+    } catch (err) {
+      toast.error('Failed to create user');
+    }
+  };
+
   const handleUpdateUser = async (userId: string, data: any) => {
     try {
       await api.patch(`/users/${userId}`, data);
@@ -61,7 +104,89 @@ export default function AdminUsersPage() {
 
   return (
     <DashboardLayout>
-      <h1 className="text-3xl font-bold mb-8">User Management</h1>
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">User Management</h1>
+        
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>Create User</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create New User</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCreateUser} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Full Name</Label>
+                <Input 
+                  placeholder="John Doe" 
+                  value={newUser.full_name}
+                  onChange={(e) => setNewUser({...newUser, full_name: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <Input 
+                  type="email" 
+                  placeholder="john@example.com" 
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Default Password</Label>
+                <Input 
+                  type="text" 
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select 
+                    value={newUser.role}
+                    onValueChange={(val) => setNewUser({...newUser, role: val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="REPORTER">Reporter</SelectItem>
+                      <SelectItem value="STAFF">Staff</SelectItem>
+                      <SelectItem value="MANAGER">Manager</SelectItem>
+                      <SelectItem value="ADMIN">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select 
+                    value={newUser.department_id || 'unassigned'}
+                    onValueChange={(val) => setNewUser({...newUser, department_id: val === 'unassigned' ? null : val})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Dept" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">None</SelectItem>
+                      {departments.map((dept: any) => (
+                        <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit" className="w-full">Create User</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
         <Table>

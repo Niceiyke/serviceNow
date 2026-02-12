@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
 from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department
@@ -64,9 +64,25 @@ class IncidentInDB(IncidentBase):
     created_at: datetime
     updated_at: datetime
     resolved_at: Optional[datetime]
+    
+    # Extra fields for display
+    reporter_name: Optional[str] = None
+    department_name: Optional[str] = None
+    category_name: Optional[str] = None
+    assignee_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm_custom(cls, obj: Incident):
+        return cls(
+            **obj.__dict__,
+            reporter_name=obj.reporter.full_name or obj.reporter.email if obj.reporter else None,
+            department_name=obj.department.name if obj.department else None,
+            category_name=obj.category.name if obj.category else None,
+            assignee_name=obj.assignee.full_name or obj.assignee.email if obj.assignee else None,
+        )
 
 VALID_TRANSITIONS = {
     IncidentStatus.OPEN: [IncidentStatus.IN_PROGRESS, IncidentStatus.CANCELLED],
@@ -102,7 +118,14 @@ def create_incident(
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
-    return db_obj
+    # Reload with options to get names
+    db_obj = db.query(Incident).options(
+        joinedload(Incident.reporter),
+        joinedload(Incident.department),
+        joinedload(Incident.category),
+        joinedload(Incident.assignee)
+    ).filter(Incident.id == db_obj.id).first()
+    return IncidentInDB.from_orm_custom(db_obj)
 
 @router.get("/", response_model=List[IncidentInDB])
 def read_incidents(
@@ -111,7 +134,12 @@ def read_incidents(
     limit: int = 100,
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    query = db.query(Incident)
+    query = db.query(Incident).options(
+        joinedload(Incident.reporter),
+        joinedload(Incident.department),
+        joinedload(Incident.category),
+        joinedload(Incident.assignee)
+    )
     
     if current_user.role == UserRole.REPORTER:
         query = query.filter(Incident.reporter_id == current_user.id)
@@ -122,7 +150,7 @@ def read_incidents(
         query = query.filter(Incident.department_id == current_user.department_id)
         
     incidents = query.offset(skip).limit(limit).all()
-    return incidents
+    return [IncidentInDB.from_orm_custom(i) for i in incidents]
 
 @router.get("/{id}", response_model=IncidentInDB)
 def read_incident(
@@ -130,7 +158,12 @@ def read_incident(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    incident = db.query(Incident).filter(Incident.id == id).first()
+    incident = db.query(Incident).options(
+        joinedload(Incident.reporter),
+        joinedload(Incident.department),
+        joinedload(Incident.category),
+        joinedload(Incident.assignee)
+    ).filter(Incident.id == id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
@@ -138,7 +171,7 @@ def read_incident(
     if current_user.role == UserRole.REPORTER and incident.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    return incident
+    return IncidentInDB.from_orm_custom(incident)
 
 @router.patch("/{id}", response_model=IncidentInDB)
 def update_incident(
@@ -223,4 +256,11 @@ def update_incident(
 
     db.commit()
     db.refresh(incident)
-    return incident
+    # Reload with options to get names
+    incident = db.query(Incident).options(
+        joinedload(Incident.reporter),
+        joinedload(Incident.department),
+        joinedload(Incident.category),
+        joinedload(Incident.assignee)
+    ).filter(Incident.id == id).first()
+    return IncidentInDB.from_orm_custom(incident)

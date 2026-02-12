@@ -68,6 +68,7 @@ A professional, fullstack incident management system built with **FastAPI**, **N
 ## 7. DevOps & Deployment
 - [x] **Docker:** Multi-container setup (App, Frontend, DB).
 - [x] **Traefik Routing:** `service-now.wordlyte.com` and `api-service-now.wordlyte.com`.
+- [x] **HTTPS/TLS:** Fully configured with Traefik and Cloudflare.
 - [x] **Migrations:** Alembic for versioned schema updates.
 - [ ] **CI/CD:** GitHub Actions for linting, type-checking, and testing.
 - [x] **Health Checks:** `/health` endpoint with DB connectivity check.

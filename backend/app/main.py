@@ -9,7 +9,12 @@ app = FastAPI(title="ServiceNow Incident Management API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://service-now.wordlyte.com",
+        "https://service-now.wordlyte.com",
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

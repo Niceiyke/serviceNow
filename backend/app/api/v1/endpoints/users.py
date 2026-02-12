@@ -4,10 +4,34 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.database import get_db
 from app.models.models import User, UserRole, Department
-from app.schemas.user import UserInDB, UserUpdate
-from pydantic import UUID4
+from app.schemas.user import UserInDB, UserUpdate, UserCreate
+from app.core import security
+from app.models.models import User, UserRole, Department
 
-router = APIRouter()
+@router.post("/", response_model=UserInDB)
+def create_user(
+    user_in: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    user = db.query(User).filter(User.email == user_in.email).first()
+    if user:
+        raise HTTPException(status_code=400, detail="User already exists")
+    
+    db_obj = User(
+        email=user_in.email,
+        hashed_password=security.get_password_hash(user_in.password),
+        full_name=user_in.full_name,
+        role=user_in.role,
+        department_id=user_in.department_id,
+    )
+    db.add(db_obj)
+    db.commit()
+    db.refresh(db_obj)
+    return db_obj
 
 @router.get("/", response_model=List[UserInDB])
 def read_users(

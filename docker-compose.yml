@@ -41,7 +41,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.service-now-backend.rule=Host(`api-service-now.wordlyte.com`)"
-      - "traefik.http.routers.service-now-backend.entrypoints=web"
+      - "traefik.http.routers.service-now-backend.entrypoints=web,websecure"
+      - "traefik.http.routers.service-now-backend.tls=true"
+      - "traefik.http.routers.service-now-backend.tls.certresolver=myresolver"
       - "traefik.http.services.service-now-backend.loadbalancer.server.port=8000"
 
   service-now-frontend:
@@ -54,7 +56,7 @@ services:
       - ./frontend:/app
       - /app/node_modules
     environment:
-      - NEXT_PUBLIC_API_URL=http://api-service-now.wordlyte.com/api/v1
+      - NEXT_PUBLIC_API_URL=https://api-service-now.wordlyte.com/api/v1
     ports:
       - "3001:3000"
     depends_on:
@@ -65,7 +67,9 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.service-now-frontend.rule=Host(`service-now.wordlyte.com`)"
-      - "traefik.http.routers.service-now-frontend.entrypoints=web"
+      - "traefik.http.routers.service-now-frontend.entrypoints=web,websecure"
+      - "traefik.http.routers.service-now-frontend.tls=true"
+      - "traefik.http.routers.service-now-frontend.tls.certresolver=myresolver"
       - "traefik.http.services.service-now-frontend.loadbalancer.server.port=3000"
 
 networks:
