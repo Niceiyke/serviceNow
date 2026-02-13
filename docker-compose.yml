@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: service_now_pwd_2026
       POSTGRES_DB: service_now
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -22,7 +22,7 @@ services:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@service-now-db:5432/service_now
+      DATABASE_URL: postgresql://postgres:service_now_pwd_2026@service-now-db:5432/service_now
       SECRET_KEY: ${SECRET_KEY:-supersecretkey}
       ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 30

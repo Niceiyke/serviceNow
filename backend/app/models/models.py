@@ -51,7 +51,6 @@ class Department(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     users = relationship("User", back_populates="department")
-    categories = relationship("Category", back_populates="department")
     incidents = relationship("Incident", back_populates="department")
 
 class Category(Base):
@@ -59,12 +58,23 @@ class Category(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
-    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=False)
     description = Column(Text)
     is_active = Column(Boolean, default=True)
 
-    department = relationship("Department", back_populates="categories")
+    subcategories = relationship("Subcategory", back_populates="category")
     incidents = relationship("Incident", back_populates="category")
+
+class Subcategory(Base):
+    __tablename__ = "subcategories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False)
+    description = Column(Text)
+    is_active = Column(Boolean, default=True)
+
+    category = relationship("Category", back_populates="subcategories")
+    incidents = relationship("Incident", back_populates="subcategory")
 
 class Incident(Base):
     __tablename__ = "incidents"
@@ -77,8 +87,9 @@ class Incident(Base):
     priority = Column(Enum(IncidentPriority), default=IncidentPriority.MEDIUM)
     
     reporter_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=False)
+    department_id = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=True)
     category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False)
+    subcategory_id = Column(UUID(as_uuid=True), ForeignKey("subcategories.id"), nullable=True)
     assignee_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -88,6 +99,7 @@ class Incident(Base):
     reporter = relationship("User", foreign_keys=[reporter_id], back_populates="reported_incidents")
     department = relationship("Department", back_populates="incidents")
     category = relationship("Category", back_populates="incidents")
+    subcategory = relationship("Subcategory", back_populates="incidents")
     assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_incidents")
     comments = relationship("Comment", back_populates="incident")
     audit_logs = relationship("AuditLog", back_populates="incident")

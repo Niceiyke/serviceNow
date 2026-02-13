@@ -1,12 +1,11 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
-from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department
+from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory
 from pydantic import BaseModel, UUID4
 from datetime import datetime
-
 from sqlalchemy import func
 
 router = APIRouter()
@@ -16,20 +15,17 @@ def get_incident_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    if current_user.role not in ["ADMIN", "MANAGER"]:
+    if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    # 1. Total by Status
     status_counts = db.query(
         Incident.status, func.count(Incident.id)
     ).group_by(Incident.status).all()
     
-    # 2. Total by Department
     dept_counts = db.query(
         Department.name, func.count(Incident.id)
     ).join(Incident, Incident.department_id == Department.id).group_by(Department.name).all()
     
-    # 3. Total by Priority
     priority_counts = db.query(
         Incident.priority, func.count(Incident.id)
     ).group_by(Incident.priority).all()
@@ -44,16 +40,21 @@ class IncidentBase(BaseModel):
     title: str
     description: str
     priority: IncidentPriority = IncidentPriority.MEDIUM
-    department_id: UUID4
     category_id: UUID4
+    subcategory_id: Optional[UUID4] = None
+    department_id: Optional[UUID4] = None
 
 class IncidentCreate(IncidentBase):
     pass
 
 class IncidentUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
     status: Optional[IncidentStatus] = None
     priority: Optional[IncidentPriority] = None
     assignee_id: Optional[UUID4] = None
+    category_id: Optional[UUID4] = None
+    subcategory_id: Optional[UUID4] = None
 
 class IncidentInDB(IncidentBase):
     id: UUID4
@@ -65,10 +66,10 @@ class IncidentInDB(IncidentBase):
     updated_at: datetime
     resolved_at: Optional[datetime]
     
-    # Extra fields for display
     reporter_name: Optional[str] = None
     department_name: Optional[str] = None
     category_name: Optional[str] = None
+    subcategory_name: Optional[str] = None
     assignee_name: Optional[str] = None
 
     class Config:
@@ -81,6 +82,7 @@ class IncidentInDB(IncidentBase):
             reporter_name=obj.reporter.full_name or obj.reporter.email if obj.reporter else None,
             department_name=obj.department.name if obj.department else None,
             category_name=obj.category.name if obj.category else None,
+            subcategory_name=obj.subcategory.name if obj.subcategory else None,
             assignee_name=obj.assignee.full_name or obj.assignee.email if obj.assignee else None,
         )
 
@@ -92,10 +94,7 @@ VALID_TRANSITIONS = {
     IncidentStatus.CANCELLED: [IncidentStatus.OPEN]
 }
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-
 def send_status_notification(email: str, incident_key: str, new_status: str):
-    # Conceptual email sending
     print(f"NOTIFICATION: Sending email to {email} - Incident {incident_key} is now {new_status}")
 
 @router.post("/", response_model=IncidentInDB)
@@ -104,25 +103,28 @@ def create_incident(
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
-    # Generate incident key (e.g., INC-2026-001)
-    # Simple implementation: INC-TIMESTAMP-RANDOM or just count
     count = db.query(Incident).count()
     incident_key = f"INC-{datetime.utcnow().year}-{count + 1:03d}"
     
+    # Use reporter's department if not provided
+    dept_id = incident_in.department_id or current_user.department_id
+
     db_obj = Incident(
-        **incident_in.dict(),
+        **incident_in.dict(exclude={"department_id"}),
         incident_key=incident_key,
         reporter_id=current_user.id,
+        department_id=dept_id,
         status=IncidentStatus.OPEN
     )
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
-    # Reload with options to get names
+    
     db_obj = db.query(Incident).options(
         joinedload(Incident.reporter),
         joinedload(Incident.department),
         joinedload(Incident.category),
+        joinedload(Incident.subcategory),
         joinedload(Incident.assignee)
     ).filter(Incident.id == db_obj.id).first()
     return IncidentInDB.from_orm_custom(db_obj)
@@ -138,6 +140,7 @@ def read_incidents(
         joinedload(Incident.reporter),
         joinedload(Incident.department),
         joinedload(Incident.category),
+        joinedload(Incident.subcategory),
         joinedload(Incident.assignee)
     )
     
@@ -145,7 +148,6 @@ def read_incidents(
         query = query.filter(Incident.reporter_id == current_user.id)
     elif current_user.role == UserRole.STAFF:
         query = query.filter(Incident.department_id == current_user.department_id)
-    # Managers and Admins see all for now, or we can scope Managers to their dept
     elif current_user.role == UserRole.MANAGER:
         query = query.filter(Incident.department_id == current_user.department_id)
         
@@ -162,12 +164,12 @@ def read_incident(
         joinedload(Incident.reporter),
         joinedload(Incident.department),
         joinedload(Incident.category),
+        joinedload(Incident.subcategory),
         joinedload(Incident.assignee)
     ).filter(Incident.id == id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
-    # Access check
     if current_user.role == UserRole.REPORTER and incident.reporter_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
@@ -185,7 +187,22 @@ def update_incident(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
 
-    # 1. State Machine Validation
+    # Access check: Reporters can only update their own incidents
+    is_owner = incident.reporter_id == current_user.id
+    if current_user.role == UserRole.REPORTER and not is_owner:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    # 1. Title/Description Updates
+    if incident_update.title:
+        incident.title = incident_update.title
+    if incident_update.description:
+        incident.description = incident_update.description
+    if incident_update.category_id:
+        incident.category_id = incident_update.category_id
+    if incident_update.subcategory_id:
+        incident.subcategory_id = incident_update.subcategory_id
+
+    # 2. State Machine Validation
     if incident_update.status:
         if incident_update.status not in VALID_TRANSITIONS[incident.status]:
             raise HTTPException(
@@ -193,14 +210,12 @@ def update_incident(
                 detail=f"Invalid transition from {incident.status} to {incident_update.status}"
             )
         
-        # Role-based transition check
         if incident_update.status == IncidentStatus.RESOLVED and current_user.role not in [UserRole.STAFF, UserRole.MANAGER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Only staff can resolve incidents")
         
-        if incident_update.status == IncidentStatus.CLOSED and current_user.id != incident.reporter_id and current_user.role != UserRole.ADMIN:
+        if incident_update.status == IncidentStatus.CLOSED and not is_owner and current_user.role != UserRole.ADMIN:
             raise HTTPException(status_code=403, detail="Only the reporter can close the incident")
 
-        # Log transition
         audit = AuditLog(
             incident_id=incident.id,
             actor_id=current_user.id,
@@ -212,7 +227,6 @@ def update_incident(
         
         if incident_update.status == IncidentStatus.RESOLVED:
             incident.resolved_at = datetime.utcnow()
-            # Notify reporter
             background_tasks.add_task(
                 send_status_notification, 
                 incident.reporter.email, 
@@ -222,7 +236,7 @@ def update_incident(
         
         incident.status = incident_update.status
 
-    # 2. Assignment Logic
+    # 3. Assignment Logic
     if incident_update.assignee_id:
         if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN, UserRole.STAFF]:
              raise HTTPException(status_code=403, detail="Not authorized to assign")
@@ -239,7 +253,7 @@ def update_incident(
         if incident.status == IncidentStatus.OPEN:
             incident.status = IncidentStatus.IN_PROGRESS
 
-    # 3. Priority Logic
+    # 4. Priority Logic
     if incident_update.priority:
         if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN, UserRole.STAFF]:
              raise HTTPException(status_code=403, detail="Not authorized to change priority")
@@ -256,11 +270,12 @@ def update_incident(
 
     db.commit()
     db.refresh(incident)
-    # Reload with options to get names
+    
     incident = db.query(Incident).options(
         joinedload(Incident.reporter),
         joinedload(Incident.department),
         joinedload(Incident.category),
+        joinedload(Incident.subcategory),
         joinedload(Incident.assignee)
     ).filter(Incident.id == id).first()
     return IncidentInDB.from_orm_custom(incident)

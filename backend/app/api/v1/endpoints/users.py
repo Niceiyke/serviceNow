@@ -6,7 +6,9 @@ from app.core.database import get_db
 from app.models.models import User, UserRole, Department
 from app.schemas.user import UserInDB, UserUpdate, UserCreate
 from app.core import security
-from app.models.models import User, UserRole, Department
+from pydantic import UUID4
+
+router = APIRouter()
 
 @router.post("/", response_model=UserInDB)
 def create_user(
@@ -45,6 +47,29 @@ def read_users(
     
     users = db.query(User).offset(skip).limit(limit).all()
     return users
+
+@router.patch("/me", response_model=UserInDB)
+def update_user_me(
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    if user_update.department_id:
+        dept = db.query(Department).filter(Department.id == user_update.department_id).first()
+        if not dept:
+            raise HTTPException(status_code=404, detail="Department not found")
+        current_user.department_id = user_update.department_id
+    
+    if user_update.full_name:
+        current_user.full_name = user_update.full_name
+    
+    if user_update.password:
+        current_user.hashed_password = security.get_password_hash(user_update.password)
+
+    db.add(current_user)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 @router.patch("/{id}", response_model=UserInDB)
 def update_user_role_dept(
