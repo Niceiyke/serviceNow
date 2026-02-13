@@ -8,8 +8,17 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { Shield, Hammer, CheckCircle2, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, Hammer, CheckCircle2, AlertCircle, Search, Filter, X } from 'lucide-react';
+import { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
 
 const STATUS_COLUMNS = [
   { id: 'OPEN', label: 'Open', icon: AlertCircle, color: 'text-sky-500' },
@@ -29,11 +38,49 @@ const itemVariants = {
 
 export default function StaffDashboardPage() {
   const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [priority, setPriority] = useState('all');
+  const [assigneeId, setAssigneeId] = useState('all');
+  const [reporterId, setReporterId] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const { data: user } = useQuery({
+    queryKey: ['me'],
+    queryFn: async () => (await api.get('/auth/me')).data,
+  });
+
+  const { data: assignees = [] } = useQuery({
+    queryKey: ['assignees'],
+    queryFn: async () => (await api.get('/users/assignees')).data,
+    enabled: !!user,
+  });
+
+  const { data: allUsers = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => (await api.get('/users/')).data,
+    enabled: !!user && user.role === 'ADMIN',
+  });
 
   const { data: incidents = [], isLoading } = useQuery({
-    queryKey: ['incidents'],
-    queryFn: async () => (await api.get('/incidents/')).data,
+    queryKey: ['incidents', { search, priority, assigneeId, reporterId }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (priority !== 'all') params.append('priority', priority);
+      if (assigneeId !== 'all') params.append('assignee_id', assigneeId);
+      if (reporterId !== 'all') params.append('reporter_id', reporterId);
+      
+      const response = await api.get(`/incidents/?${params.toString()}`);
+      return response.data;
+    },
   });
+
+  const resetFilters = () => {
+    setSearch('');
+    setPriority('all');
+    setAssigneeId('all');
+    setReporterId('all');
+  };
 
   const mutation = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => (await api.patch(`/incidents/${id}`, { status })).data,
@@ -55,10 +102,94 @@ export default function StaffDashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex items-center gap-4 mb-10">
-        <Shield className="w-10 h-10 text-primary" />
-        <h1 className="text-3xl font-bold tracking-tight">Staff Dashboard</h1>
+      <div className="flex items-center justify-between gap-4 mb-10">
+        <div className="flex items-center gap-4">
+          <Shield className="w-10 h-10 text-primary" />
+          <h1 className="text-3xl font-bold tracking-tight">Staff Dashboard</h1>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={showFilters ? 'bg-primary/10 border-primary' : ''}>
+          <Filter className="w-4 h-4 mr-2" />
+          Filters
+        </Button>
       </div>
+
+      <AnimatePresence>
+        {showFilters && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="p-6 bg-card border border-primary/10 rounded-md grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10 shadow-lg">
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-primary">Search</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Title, Key..." 
+                    value={search} 
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 h-9 text-xs bg-black/20 border-primary/20"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-primary">Priority</label>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger className="h-9 text-xs bg-black/20 border-primary/20">
+                    <SelectValue placeholder="All Priorities" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Priorities</SelectItem>
+                    <SelectItem value="LOW">Low</SelectItem>
+                    <SelectItem value="MEDIUM">Medium</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="CRITICAL">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-primary">Assignee</label>
+                <Select value={assigneeId} onValueChange={setAssigneeId}>
+                  <SelectTrigger className="h-9 text-xs bg-black/20 border-primary/20">
+                    <SelectValue placeholder="All Staff" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Staff</SelectItem>
+                    {assignees.map((a: any) => (
+                      <SelectItem key={a.id} value={a.id}>{a.full_name || a.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold text-primary">Reporter</label>
+                <Select value={reporterId} onValueChange={setReporterId}>
+                  <SelectTrigger className="h-9 text-xs bg-black/20 border-primary/20">
+                    <SelectValue placeholder="All Users" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Users</SelectItem>
+                    {allUsers.map((u: any) => (
+                      <SelectItem key={u.id} value={u.id}>{u.full_name || u.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="lg:col-span-4 flex justify-end">
+                <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground text-[10px] uppercase font-bold">
+                  <X className="w-3 h-3 mr-1" /> Clear All
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <motion.div 
         variants={containerVariants}

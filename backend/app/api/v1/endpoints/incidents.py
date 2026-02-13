@@ -172,6 +172,12 @@ def read_incidents(
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
+    status: Optional[IncidentStatus] = None,
+    priority: Optional[IncidentPriority] = None,
+    reporter_id: Optional[UUID4] = None,
+    assignee_id: Optional[UUID4] = None,
+    search: Optional[str] = None,
+    created_at: Optional[datetime] = None,
     current_user: User = Depends(deps.get_current_active_user),
 ):
     query = db.query(Incident).options(
@@ -182,14 +188,35 @@ def read_incidents(
         joinedload(Incident.assignee)
     )
     
+    # Role-based filtering
     if current_user.role == UserRole.REPORTER:
         query = query.filter(Incident.reporter_id == current_user.id)
-    elif current_user.role == UserRole.STAFF:
+    elif current_user.role == UserRole.STAFF or current_user.role == UserRole.MANAGER:
         query = query.filter(Incident.department_id == current_user.department_id)
-    elif current_user.role == UserRole.MANAGER:
-        query = query.filter(Incident.department_id == current_user.department_id)
+    
+    # Dynamic filtering
+    if status:
+        query = query.filter(Incident.status == status)
+    if priority:
+        query = query.filter(Incident.priority == priority)
+    if reporter_id:
+        query = query.filter(Incident.reporter_id == reporter_id)
+    if assignee_id:
+        query = query.filter(Incident.assignee_id == assignee_id)
+    if search:
+        query = query.filter(
+            (Incident.title.ilike(f"%{search}%")) | 
+            (Incident.incident_key.ilike(f"%{search}%")) |
+            (Incident.description.ilike(f"%{search}%"))
+        )
+    if created_at:
+        # Filter for a specific day
+        start_day = datetime(created_at.year, created_at.month, created_at.day)
+        from datetime import timedelta
+        end_day = start_day + timedelta(days=1)
+        query = query.filter(Incident.created_at >= start_day, Incident.created_at < end_day)
         
-    incidents = query.offset(skip).limit(limit).all()
+    incidents = query.order_by(Incident.created_at.desc()).offset(skip).limit(limit).all()
     return [IncidentInDB.from_orm_custom(i) for i in incidents]
 
 @router.get("/{id}", response_model=IncidentInDB)
