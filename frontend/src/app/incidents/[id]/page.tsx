@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 import { 
   Select, 
   SelectContent, 
@@ -19,10 +20,33 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogFooter 
+} from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Scroll, MessageSquare, Shield, Clock, User, Landmark, Ticket, History, ArrowRight, Lock } from 'lucide-react';
+import { 
+  Scroll, 
+  MessageSquare, 
+  Shield, 
+  Clock, 
+  User, 
+  Landmark, 
+  Ticket, 
+  History, 
+  ArrowRight, 
+  Lock, 
+  Send,
+  Zap,
+  UserCog,
+  CheckCircle2,
+  AlertCircle
+} from 'lucide-react';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -42,6 +66,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   const [isInternal, setIsInternal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
+  const [isClosureDialogOpen, setIsClosureDialogOpen] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<string | null>(null);
+  const [closureReason, setClosureReason] = useState('');
 
   const { data: user } = useQuery({
     queryKey: ['me'],
@@ -142,6 +169,16 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     }
   };
 
+  const getEventIcon = (action: string) => {
+    switch (action) {
+      case 'STATUS_CHANGE': return <Zap className="w-4 h-4 text-amber-500" />;
+      case 'PRIORITY_CHANGE': return <AlertCircle className="w-4 h-4 text-rose-500" />;
+      case 'ASSIGNMENT': return <UserCog className="w-4 h-4 text-sky-500" />;
+      case 'CREATED': return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
+      default: return <Clock className="w-4 h-4 text-primary/60" />;
+    }
+  };
+
   return (
     <DashboardLayout>
       <motion.div 
@@ -188,8 +225,19 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
           </div>
           
           <div className="w-full md:w-auto">
-            <Select onValueChange={(val) => updateMutation.mutate({ status: val })} defaultValue={incident.status}>
-              <SelectTrigger className="w-full md:w-[200px] bg-card border-primary/30 text-xs font-bold uppercase">
+            <Select 
+              onValueChange={(val) => {
+                if (['CLOSED', 'CANCELLED'].includes(val)) {
+                  setPendingStatus(val);
+                  setIsClosureDialogOpen(true);
+                } else {
+                  updateMutation.mutate({ status: val });
+                }
+              }} 
+              value={incident.status}
+              disabled={['CLOSED', 'CANCELLED'].includes(incident.status)}
+            >
+              <SelectTrigger className="w-full md:w-[200px] bg-card border-primary/30 text-xs font-bold uppercase text-primary disabled:opacity-50">
                 <SelectValue placeholder="Update Status" />
               </SelectTrigger>
               <SelectContent>
@@ -202,6 +250,44 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
             </Select>
           </div>
         </motion.div>
+
+        <Dialog open={isClosureDialogOpen} onOpenChange={setIsClosureDialogOpen}>
+          <DialogContent className="bg-card border-primary/20">
+            <DialogHeader>
+              <DialogTitle className="uppercase tracking-widest font-bold text-primary">
+                Confirm {pendingStatus?.toLowerCase()}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-6 space-y-4">
+              <p className="text-xs text-muted-foreground uppercase font-medium tracking-tight">
+                A professional justification is required to {pendingStatus?.toLowerCase()} this incident. 
+                This will be logged as a permanent system comment.
+              </p>
+              <Textarea 
+                placeholder="Provide detailed justification..." 
+                value={closureReason}
+                onChange={(e) => setClosureReason(e.target.value)}
+                className="bg-black/40 border-primary/20 min-h-[120px] text-sm resize-none"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => { setIsClosureDialogOpen(false); setClosureReason(''); }} className="text-[10px] uppercase font-bold">
+                Cancel
+              </Button>
+              <Button 
+                disabled={!closureReason.trim() || updateMutation.isPending}
+                onClick={() => {
+                  updateMutation.mutate({ status: pendingStatus, status_comment: closureReason });
+                  setIsClosureDialogOpen(false);
+                  setClosureReason('');
+                }}
+                className="gap-2"
+              >
+                Confirm {pendingStatus}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
@@ -244,100 +330,140 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                 </TabsList>
 
                 <TabsContent value="comments" className="focus-visible:outline-none">
-                  <Card className="border-primary/10">
-                    <CardContent className="space-y-6 pt-6">
-                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                  <Card className="border-primary/10 bg-black/5">
+                    <CardContent className="space-y-8 pt-8">
+                      <div className="space-y-6 max-h-[600px] overflow-y-auto pr-4 scrollbar-thin scrollbar-thumb-primary/20">
                         {comments.length === 0 ? (
-                          <p className="text-sm text-muted-foreground italic text-center py-4">No comments posted yet.</p>
+                          <div className="flex flex-col items-center justify-center py-12 opacity-40">
+                            <MessageSquare className="w-12 h-12 mb-4" />
+                            <p className="text-sm font-medium uppercase tracking-widest">No communication logs</p>
+                          </div>
                         ) : (
                           comments.map((comment: any) => (
                             <div key={comment.id} className={cn(
-                              "p-4 border rounded-sm relative group transition-all",
+                              "relative pl-4 border-l-2 transition-all",
                               comment.is_internal 
-                                ? "bg-amber-950/20 border-amber-500/30" 
-                                : "bg-muted/20 border-primary/5"
+                                ? "border-amber-500/50 bg-amber-500/5 py-4 px-6 rounded-r-md" 
+                                : "border-primary/20 py-2"
                             )}>
-                              {comment.is_internal && (
-                                <div className="absolute top-2 right-2 flex items-center gap-1 text-[9px] font-bold text-amber-500 uppercase">
-                                  <Lock className="w-3 h-3" />
-                                  Internal Note
+                              <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+                                    <User className="w-4 h-4 text-primary" />
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-bold uppercase tracking-tight text-foreground">
+                                      {comment.author_name}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground block font-mono">
+                                      {new Date(comment.created_at).toLocaleString()}
+                                    </span>
+                                  </div>
                                 </div>
-                              )}
-                              <p className="text-sm text-foreground/90 mb-2 leading-relaxed">{comment.content}</p>
-                              <div className="flex justify-between items-center opacity-60">
-                                <span className="text-[10px] uppercase font-bold flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  {comment.author_name || 'System User'}
-                                </span>
-                                <span className="text-[10px] uppercase font-bold flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  {new Date(comment.created_at).toLocaleString()}
-                                </span>
+                                {comment.is_internal && (
+                                  <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[9px] font-bold uppercase py-0 px-2 h-5">
+                                    <Lock className="w-2.5 h-2.5 mr-1" /> Internal
+                                  </Badge>
+                                )}
                               </div>
+                              <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap">
+                                {comment.content}
+                              </p>
                             </div>
                           ))
                         )}
                       </div>
                       
-                      <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate({ content: newComment, is_internal: isInternal }); }} className="space-y-4 pt-6 border-t border-primary/10">
-                        <Textarea 
-                          placeholder="Add a comment..." 
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          className="bg-black/20 border-primary/20 focus:border-primary/40 rounded-none min-h-[100px]"
-                        />
-                        <div className="flex justify-between items-center">
-                          {user?.role !== 'REPORTER' ? (
-                            <div className="flex items-center space-x-2">
-                              <Checkbox 
-                                id="internal" 
-                                checked={isInternal} 
-                                onCheckedChange={(checked) => setIsInternal(!!checked)}
-                                className="border-primary/30 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
-                              />
-                              <Label htmlFor="internal" className="text-xs font-bold uppercase text-muted-foreground cursor-pointer flex items-center gap-1">
-                                <Lock className="w-3 h-3" />
-                                Internal Note
-                              </Label>
+                      <div className="pt-6 border-t border-primary/10">
+                        {['CLOSED', 'CANCELLED'].includes(incident.status) ? (
+                          <div className="bg-muted/30 border border-primary/10 p-6 text-center rounded-sm">
+                            <Lock className="w-8 h-8 text-muted-foreground/40 mx-auto mb-3" />
+                            <p className="text-xs uppercase font-black tracking-[0.2em] text-muted-foreground/60">
+                              Incident {incident.status}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground mt-1">
+                              This record is finalized. Further communication is restricted.
+                            </p>
+                          </div>
+                        ) : (
+                          <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate({ content: newComment, is_internal: isInternal }); }} className="space-y-4">
+                            <Textarea 
+                              placeholder="Type your message or internal note..." 
+                              value={newComment}
+                              onChange={(e) => setNewComment(e.target.value)}
+                              className="bg-black/40 border-primary/20 focus:border-primary/60 rounded-sm min-h-[120px] text-sm resize-none"
+                            />
+                            <div className="flex justify-between items-center">
+                              {['ADMIN', 'MANAGER', 'STAFF'].includes(user?.role) ? (
+                                <div className="flex items-center space-x-3 bg-primary/5 px-4 py-2 rounded-full border border-primary/10">
+                                  <Checkbox 
+                                    id="internal" 
+                                    checked={isInternal} 
+                                    onCheckedChange={(checked) => setIsInternal(!!checked)}
+                                    className="border-primary/40 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
+                                  />
+                                  <Label htmlFor="internal" className="text-[10px] font-bold uppercase text-muted-foreground cursor-pointer flex items-center gap-2 select-none">
+                                    <Lock className="w-3 h-3" />
+                                    Mark as Internal Note
+                                  </Label>
+                                </div>
+                              ) : <div />}
+                              <Button type="submit" disabled={commentMutation.isPending || !newComment.trim()} className="gap-2 px-8">
+                                {commentMutation.isPending ? 'Processing...' : (
+                                  <>
+                                    <Send className="w-4 h-4" />
+                                    Post Message
+                                  </>
+                                )}
+                              </Button>
                             </div>
-                          ) : <div />}
-                          <Button type="submit" disabled={commentMutation.isPending || !newComment.trim()}>
-                            {commentMutation.isPending ? 'Posting...' : 'Post Comment'}
-                          </Button>
-                        </div>
-                      </form>
+                          </form>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 </TabsContent>
 
                 <TabsContent value="timeline" className="focus-visible:outline-none">
-                  <Card className="border-primary/10">
-                    <CardContent className="pt-8 px-8">
-                      <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:h-full before:w-px before:bg-gradient-to-b before:from-primary/50 before:via-primary/20 before:to-transparent">
+                  <Card className="border-primary/10 bg-black/5">
+                    <CardContent className="pt-10 px-10 pb-10">
+                      <div className="relative space-y-10 before:absolute before:inset-0 before:ml-5 before:h-full before:w-px before:bg-gradient-to-b before:from-primary/40 before:via-primary/10 before:to-transparent">
                         {timeline.length === 0 ? (
-                          <p className="text-sm text-muted-foreground italic text-center py-4">No activity history available.</p>
+                          <div className="flex flex-col items-center justify-center py-12 opacity-40">
+                            <History className="w-12 h-12 mb-4" />
+                            <p className="text-sm font-medium uppercase tracking-widest">No activity recorded</p>
+                          </div>
                         ) : (
                           timeline.map((log: any) => (
-                            <div key={log.id} className="relative flex items-start gap-6 group">
-                              <div className="absolute left-0 mt-1.5 h-10 w-10 flex items-center justify-center rounded-full bg-background border border-primary/30 z-10 group-hover:border-primary group-hover:shadow-[0_0_10px_rgba(var(--primary),0.3)] transition-all">
-                                <History className="w-4 h-4 text-primary" />
+                            <div key={log.id} className="relative flex items-start gap-8 group">
+                              <div className="absolute left-0 mt-1 h-10 w-10 flex items-center justify-center rounded-full bg-background border border-primary/20 z-10 group-hover:border-primary/60 group-hover:scale-110 transition-all duration-300">
+                                {getEventIcon(log.action)}
                               </div>
-                              <div className="ml-14 flex-1 pb-2">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
-                                  <span className="text-xs font-bold uppercase tracking-tight text-foreground/90">
-                                    {log.actor_name} <span className="text-primary/70 ml-1 lowercase font-medium">{getActionLabel(log.action)}</span>
-                                  </span>
-                                  <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">
+                              <div className="ml-14 flex-1">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-foreground">
+                                      {log.actor_name}
+                                    </span>
+                                    <span className="text-[9px] uppercase font-black text-muted-foreground/60 tracking-widest border border-primary/10 px-2 py-0.5 rounded bg-muted/20">
+                                      {getActionLabel(log.action)}
+                                    </span>
+                                  </div>
+                                  <span className="text-[9px] font-mono text-muted-foreground tracking-widest opacity-60">
                                     {new Date(log.created_at).toLocaleString()}
                                   </span>
                                 </div>
                                 {log.old_value || log.new_value ? (
-                                  <div className="flex items-center gap-3 text-xs mt-2 p-2 rounded bg-primary/5 border border-primary/10 w-fit">
-                                    <span className="text-muted-foreground line-through opacity-50">{log.old_value || 'None'}</span>
-                                    <ArrowRight className="w-3 h-3 text-primary" />
-                                    <span className="font-bold text-primary">{log.new_value || 'None'}</span>
+                                  <div className="flex items-center gap-4 text-[10px] font-mono mt-3 p-2.5 rounded-sm bg-black/20 border border-primary/5 w-fit group-hover:border-primary/20 transition-colors">
+                                    <span className="text-muted-foreground/40 line-through truncate max-w-[150px] uppercase">{log.old_value || 'None'}</span>
+                                    <ArrowRight className="w-3 h-3 text-primary/40" />
+                                    <span className="font-bold text-primary truncate max-w-[250px] uppercase">{log.new_value || 'None'}</span>
                                   </div>
-                                ) : null}
+                                ) : (
+                                  <div className="text-[10px] font-mono text-muted-foreground/40 uppercase mt-1 italic">
+                                    System record updated
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))
@@ -387,8 +513,9 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                         <Select 
                           onValueChange={(val) => updateMutation.mutate({ assignee_id: val === "unassigned" ? null : val })} 
                           defaultValue={incident.assignee_id || "unassigned"}
+                          disabled={['CLOSED', 'CANCELLED'].includes(incident.status)}
                         >
-                          <SelectTrigger className="w-full bg-black/20 border-primary/20 text-xs h-8">
+                          <SelectTrigger className="w-full bg-black/20 border-primary/20 text-xs h-8 disabled:opacity-50">
                             <SelectValue placeholder="Assign To..." />
                           </SelectTrigger>
                           <SelectContent>

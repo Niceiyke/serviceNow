@@ -11,6 +11,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Hammer, CheckCircle2, AlertCircle, Search, Filter, X } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { 
   Select, 
@@ -43,6 +44,7 @@ export default function StaffDashboardPage() {
   const [assigneeId, setAssigneeId] = useState('all');
   const [reporterId, setReporterId] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const { data: user } = useQuery({
     queryKey: ['me'],
@@ -76,21 +78,38 @@ export default function StaffDashboardPage() {
     refetchInterval: 15000, // Refresh every 15 seconds for staff board
   });
 
-  const resetFilters = () => {
-    setSearch('');
-    setPriority('all');
-    setAssigneeId('all');
-    setReporterId('all');
-  };
-
   const mutation = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => (await api.patch(`/incidents/${id}`, { status })).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['incidents'] });
       toast.success('Incident status has been updated.');
     },
-    onError: () => toast.error('Failed to update incident status.'),
+    onError: (err: any) => {
+      toast.error(err.response?.data?.detail || 'Failed to update incident status.');
+    },
   });
+
+  const handleDragStart = (id: string) => {
+    setDraggingId(id);
+  };
+
+  const handleDrop = (status: string) => {
+    if (draggingId) {
+      mutation.mutate({ id: draggingId, status });
+      setDraggingId(null);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const resetFilters = () => {
+    setSearch('');
+    setPriority('all');
+    setAssigneeId('all');
+    setReporterId('all');
+  };
 
   if (isLoading) return (
     <DashboardLayout>
@@ -199,7 +218,12 @@ export default function StaffDashboardPage() {
         className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-[700px]"
       >
         {STATUS_COLUMNS.map((col) => (
-          <div key={col.id} className="flex flex-col gap-6">
+          <div 
+            key={col.id} 
+            className="flex flex-col gap-6"
+            onDragOver={handleDragOver}
+            onDrop={() => handleDrop(col.id)}
+          >
             <div className="flex items-center justify-between px-2">
               <h2 className="uppercase tracking-widest text-xs font-bold flex items-center gap-2">
                 <col.icon className={`w-4 h-4 ${col.color}`} />
@@ -210,12 +234,24 @@ export default function StaffDashboardPage() {
               </Badge>
             </div>
             
-            <div className="flex-1 space-y-6 p-4 rounded-md border border-primary/10 bg-black/10 shadow-inner overflow-y-auto max-h-[800px]">
+            <div className={cn(
+              "flex-1 space-y-6 p-4 rounded-md border border-primary/10 bg-black/10 shadow-inner overflow-y-auto max-h-[800px] transition-colors",
+              draggingId && "bg-primary/5 border-dashed border-primary/30"
+            )}>
               {incidents
                 .filter((i: any) => i.status === col.id)
                 .map((incident: any) => (
-                  <motion.div key={incident.id} variants={itemVariants}>
-                    <Card className="border-primary/10 hover:border-primary/40 transition-all group overflow-visible bg-card">
+                  <motion.div 
+                    key={incident.id} 
+                    variants={itemVariants}
+                    draggable
+                    onDragStart={() => handleDragStart(incident.id)}
+                    className="cursor-grab active:cursor-grabbing"
+                  >
+                    <Card className={cn(
+                      "border-primary/10 hover:border-primary/40 transition-all group overflow-visible bg-card",
+                      draggingId === incident.id && "opacity-50 border-primary shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                    )}>
                       <div className="p-5 space-y-4">
                         <div className="flex justify-between items-start">
                           <span className="text-[10px] font-mono text-primary/60 tracking-widest">{incident.incident_key}</span>

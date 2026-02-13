@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { Sidebar } from './sidebar';
-import { Menu, Loader2, Compass } from 'lucide-react';
+import { Menu, Loader2, Compass, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
 
@@ -35,7 +35,16 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isError) return null;
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-background text-primary gap-4">
+        <ShieldCheck className="w-12 h-12 text-destructive opacity-50" />
+        <h2 className="text-xl font-bold uppercase tracking-widest">Session Expired</h2>
+        <p className="text-muted-foreground text-sm">Please log in again to continue.</p>
+        <Button onClick={() => router.push('/login')}>Return to Login</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">

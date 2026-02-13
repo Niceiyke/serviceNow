@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
 from app.models.models import Incident, Comment, User, UserRole
@@ -59,6 +59,12 @@ def create_comment(
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
+    
+    if incident.status in [IncidentStatus.CLOSED, IncidentStatus.CANCELLED]:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Comments are no longer allowed as the incident is {incident.status.lower()}"
+        )
     
     if comment_in.is_internal and current_user.role == UserRole.REPORTER:
         raise HTTPException(status_code=403, detail="Reporters cannot post internal comments")

@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
-from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory
+from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory, Comment
 from pydantic import BaseModel, UUID4
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.schemas.audit import AuditLog as AuditLogSchema
 from sqlalchemy import func
 
@@ -74,10 +74,63 @@ def get_incident_stats(
         Incident.priority, func.count(Incident.id)
     ).group_by(Incident.priority).all()
 
+    # MTTR Calculation (Mean Time to Resolution)
+    # Average of (resolved_at - created_at)
+    resolved_incidents = db.query(Incident).filter(Incident.resolved_at != None).all()
+    
+    mttr_total = 0
+    mttr_count = len(resolved_incidents)
+    mttr_by_priority = {}
+
+    for inc in resolved_incidents:
+        duration = (inc.resolved_at - inc.created_at).total_seconds() / 3600 # hours
+        mttr_total += duration
+        
+        p = inc.priority
+        if p not in mttr_by_priority:
+            mttr_by_priority[p] = {"total": 0, "count": 0}
+        mttr_by_priority[p]["total"] += duration
+        mttr_by_priority[p]["count"] += 1
+
+    avg_mttr = mttr_total / mttr_count if mttr_count > 0 else 0
+    
+    # 30-Day MTTR Trend
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    # We fetch incidents resolved in the last 30 days
+    trend_incidents = db.query(Incident).filter(
+        Incident.resolved_at >= thirty_days_ago
+    ).all()
+
+    # Group by date and calculate average MTTR
+    daily_mttr = {}
+    for inc in trend_incidents:
+        date_str = str(inc.resolved_at.date())
+        duration = (inc.resolved_at - inc.created_at).total_seconds() / 3600
+        
+        if date_str not in daily_mttr:
+            daily_mttr[date_str] = {"total": 0, "count": 0}
+        
+        daily_mttr[date_str]["total"] += duration
+        daily_mttr[date_str]["count"] += 1
+
+    # Convert to sorted list for the chart
+    resolution_trend = [
+        {"date": d, "mttr": round(data["total"] / data["count"], 2)} 
+        for d, data in sorted(daily_mttr.items())
+    ]
+
+    mttr_stats = {
+        "overall": round(avg_mttr, 2),
+        "by_priority": {str(p): round(data["total"] / data["count"], 2) for p, data in mttr_by_priority.items()}
+    }
+
     return {
         "by_status": {s: c for s, c in status_counts},
         "by_department": {d: c for d, c in dept_counts},
-        "by_priority": {p: d for p, d in priority_counts}
+        "by_priority": {p: d for p, d in priority_counts},
+        "mttr": mttr_stats,
+        "trend": resolution_trend
     }
 
 class IncidentBase(BaseModel):
@@ -99,6 +152,7 @@ class IncidentUpdate(BaseModel):
     assignee_id: Optional[UUID4] = None
     category_id: Optional[UUID4] = None
     subcategory_id: Optional[UUID4] = None
+    status_comment: Optional[str] = None
 
 class IncidentInDB(IncidentBase):
     id: UUID4
@@ -135,7 +189,7 @@ VALID_TRANSITIONS = {
     IncidentStatus.IN_PROGRESS: [IncidentStatus.RESOLVED, IncidentStatus.OPEN, IncidentStatus.CANCELLED],
     IncidentStatus.RESOLVED: [IncidentStatus.CLOSED, IncidentStatus.IN_PROGRESS],
     IncidentStatus.CLOSED: [],
-    IncidentStatus.CANCELLED: [IncidentStatus.OPEN]
+    IncidentStatus.CANCELLED: []
 }
 
 def send_status_notification(email: str, incident_key: str, new_status: str):
@@ -302,9 +356,23 @@ def update_incident(
         if incident_update.status not in VALID_TRANSITIONS[incident.status]:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Invalid transition from {incident.status} to {incident_update.status}"
+                detail=f"Invalid transition from {incident.status} to {incident_update.status}. Cancelled or Closed incidents cannot be reopened."
             )
         
+        if incident_update.status in [IncidentStatus.RESOLVED, IncidentStatus.CLOSED, IncidentStatus.CANCELLED]:
+            if incident_update.status in [IncidentStatus.CLOSED, IncidentStatus.CANCELLED]:
+                if not incident_update.status_comment:
+                    raise HTTPException(status_code=400, detail=f"A comment is required to {incident_update.status.lower()} the incident")
+                
+                # Add the reason as a comment
+                reason_comment = Comment(
+                    content=f"Incident {incident_update.status.lower()} by {current_user.full_name or current_user.email}. Reason: {incident_update.status_comment}",
+                    incident_id=incident.id,
+                    author_id=current_user.id,
+                    is_internal=False
+                )
+                db.add(reason_comment)
+
         if incident_update.status == IncidentStatus.RESOLVED and current_user.role not in [UserRole.STAFF, UserRole.MANAGER, UserRole.ADMIN]:
             raise HTTPException(status_code=403, detail="Only staff can resolve incidents")
         
@@ -337,6 +405,9 @@ def update_incident(
         if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN, UserRole.STAFF]:
              raise HTTPException(status_code=403, detail="Not authorized to assign")
         
+        if incident.status in [IncidentStatus.CLOSED, IncidentStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail=f"Cannot assign user to a {incident.status.lower()} incident")
+        
         assignee_id = update_data["assignee_id"]
         
         # Fetch names for better logging
@@ -359,6 +430,9 @@ def update_incident(
     if incident_update.priority:
         if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN, UserRole.STAFF]:
              raise HTTPException(status_code=403, detail="Not authorized to change priority")
+        
+        if incident.status in [IncidentStatus.CLOSED, IncidentStatus.CANCELLED]:
+            raise HTTPException(status_code=400, detail=f"Cannot update priority of a {incident.status.lower()} incident")
         
         audit = AuditLog(
             incident_id=incident.id,
