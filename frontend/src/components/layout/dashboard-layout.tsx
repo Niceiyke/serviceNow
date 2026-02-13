@@ -7,10 +7,13 @@ import { Sidebar } from './sidebar';
 import { Menu, Loader2, Compass, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useQuery } from '@tanstack/react-query';
+import { useWebSockets } from '@/lib/use-websockets';
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
+
+  useWebSockets();
 
   const { data: user, isLoading, isError } = useQuery({
     queryKey: ['me'],

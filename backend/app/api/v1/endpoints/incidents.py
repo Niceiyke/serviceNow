@@ -9,6 +9,10 @@ from datetime import datetime, timedelta
 from app.schemas.audit import AuditLog as AuditLogSchema
 from sqlalchemy import func
 from app.services.notifications import NotificationService
+from app.core.websockets import manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -228,6 +232,8 @@ def create_incident(
     db.commit()
 
     background_tasks.add_task(NotificationService.send_incident_creation_notification, db_obj, current_user)
+    logger.info(f"Triggering broadcast for new incident: {db_obj.incident_key}")
+    background_tasks.add_task(manager.broadcast, {"type": "INCIDENT_CREATED", "id": str(db_obj.id)})
     
     db_obj = db.query(Incident).options(
         joinedload(Incident.reporter),
@@ -452,6 +458,9 @@ def update_incident(
 
     db.commit()
     db.refresh(incident)
+
+    logger.info(f"Triggering broadcast for incident update: {incident.incident_key}")
+    background_tasks.add_task(manager.broadcast, {"type": "INCIDENT_UPDATED", "id": str(incident.id)})
     
     incident = db.query(Incident).options(
         joinedload(Incident.reporter),

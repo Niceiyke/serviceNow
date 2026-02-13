@@ -7,6 +7,10 @@ from app.models.models import Incident, Comment, User, UserRole, IncidentStatus
 from pydantic import BaseModel, UUID4
 from datetime import datetime
 from app.services.notifications import NotificationService
+from app.core.websockets import manager
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -88,6 +92,8 @@ def create_comment(
         joinedload(Comment.incident).joinedload(Incident.assignee)
     ).filter(Comment.id == db_obj.id).first()
 
+    logger.info(f"Triggering broadcast for new comment on: {db_obj.incident.incident_key}")
     background_tasks.add_task(NotificationService.send_new_comment_notification, db_obj.incident, db_obj, current_user)
+    background_tasks.add_task(manager.broadcast, {"type": "COMMENT_CREATED", "incident_id": str(incident_id)})
 
     return CommentInDB.from_orm_custom(db_obj)

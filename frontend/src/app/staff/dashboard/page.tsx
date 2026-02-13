@@ -13,6 +13,7 @@ import { Shield, Hammer, CheckCircle2, AlertCircle, Search, Filter, X } from 'lu
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { useWebSockets } from '@/lib/use-websockets';
 import { 
   Select, 
   SelectContent, 
@@ -75,17 +76,43 @@ export default function StaffDashboardPage() {
       const response = await api.get(`/incidents/?${params.toString()}`);
       return response.data;
     },
-    refetchInterval: 15000, // Refresh every 15 seconds for staff board
+    refetchInterval: 10000, // 10s polling fallback for new incidents
   });
 
   const mutation = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => (await api.patch(`/incidents/${id}`, { status })).data,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['incidents'] });
-      toast.success('Incident status has been updated.');
+    // Step 1: When mutate is called:
+    onMutate: async ({ id, status }) => {
+      // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+      await queryClient.cancelQueries({ queryKey: ['incidents'] });
+
+      // Snapshot the previous value
+      const previousIncidents = queryClient.getQueryData(['incidents', { search, priority, assigneeId, reporterId }]);
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(['incidents', { search, priority, assigneeId, reporterId }], (old: any) => {
+        if (!old) return old;
+        return old.map((incident: any) => 
+          incident.id === id ? { ...incident, status } : incident
+        );
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousIncidents };
     },
-    onError: (err: any) => {
+    // If the mutation fails, use the context returned from onMutate to roll back
+    onError: (err: any, newTodo, context) => {
+      queryClient.setQueryData(['incidents', { search, priority, assigneeId, reporterId }], context?.previousIncidents);
       toast.error(err.response?.data?.detail || 'Failed to update incident status.');
+    },
+    // Always refetch after error or success to sync with server
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] });
+      // Also invalidate stats as a transition might affect them
+      queryClient.invalidateQueries({ queryKey: ['incident-stats'] });
+    },
+    onSuccess: () => {
+      toast.success('Incident status has been updated.');
     },
   });
 
@@ -211,46 +238,46 @@ export default function StaffDashboardPage() {
         )}
       </AnimatePresence>
 
-      <motion.div 
-        variants={containerVariants}
-        initial="hidden"
-        animate="visible"
+      <div 
         className="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-[700px]"
       >
-        {STATUS_COLUMNS.map((col) => (
-          <div 
-            key={col.id} 
-            className="flex flex-col gap-6"
-            onDragOver={handleDragOver}
-            onDrop={() => handleDrop(col.id)}
-          >
-            <div className="flex items-center justify-between px-2">
-              <h2 className="uppercase tracking-widest text-xs font-bold flex items-center gap-2">
-                <col.icon className={`w-4 h-4 ${col.color}`} />
-                {col.label}
-              </h2>
-              <Badge className="bg-primary/10 text-primary border-primary/20 font-mono text-[10px]">
-                {incidents.filter((i: any) => i.status === col.id).length}
-              </Badge>
-            </div>
-            
-            <div className={cn(
-              "flex-1 space-y-6 p-4 rounded-md border border-primary/10 bg-black/10 shadow-inner overflow-y-auto max-h-[800px] transition-colors",
-              draggingId && "bg-primary/5 border-dashed border-primary/30"
-            )}>
-              {incidents
-                .filter((i: any) => i.status === col.id)
-                .map((incident: any) => (
-                  <motion.div 
+        {STATUS_COLUMNS.map((col) => {
+          const columnIncidents = incidents.filter((i: any) => i.status === col.id);
+          
+          return (
+            <div 
+              key={col.id} 
+              className="flex flex-col gap-6"
+              onDragOver={handleDragOver}
+              onDrop={() => handleDrop(col.id)}
+            >
+              <div className="flex items-center justify-between px-2">
+                <h2 className="uppercase tracking-widest text-xs font-bold flex items-center gap-2">
+                  <col.icon className={`w-4 h-4 ${col.color}`} />
+                  {col.label}
+                </h2>
+                <Badge className="bg-primary/10 text-primary border-primary/20 font-mono text-[10px]">
+                  {columnIncidents.length}
+                </Badge>
+              </div>
+              
+              <div className={cn(
+                "flex-1 space-y-6 p-4 rounded-md border border-primary/10 bg-black/10 shadow-inner overflow-y-auto max-h-[800px] transition-colors",
+                draggingId && "bg-primary/5 border-dashed border-primary/30"
+              )}>
+                {columnIncidents.map((incident: any) => (
+                  <div 
                     key={incident.id} 
-                    variants={itemVariants}
                     draggable
                     onDragStart={() => handleDragStart(incident.id)}
-                    className="cursor-grab active:cursor-grabbing"
+                    className={cn(
+                      "cursor-grab active:cursor-grabbing transition-all duration-200",
+                      draggingId === incident.id ? "opacity-50 scale-95" : "opacity-100 scale-100"
+                    )}
                   >
                     <Card className={cn(
-                      "border-primary/10 hover:border-primary/40 transition-all group overflow-visible bg-card",
-                      draggingId === incident.id && "opacity-50 border-primary shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                      "border-primary/10 hover:border-primary/40 transition-all group overflow-visible bg-card shadow-sm hover:shadow-md",
+                      draggingId === incident.id && "border-primary shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                     )}>
                       <div className="p-5 space-y-4">
                         <div className="flex justify-between items-start">
@@ -261,7 +288,7 @@ export default function StaffDashboardPage() {
                         </div>
 
                         <Link href={`/incidents/${incident.id}`}>
-                          <h3 className="text-base leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                          <h3 className="text-base font-semibold leading-snug group-hover:text-primary transition-colors line-clamp-2">
                             {incident.title}
                           </h3>
                         </Link>
@@ -274,7 +301,7 @@ export default function StaffDashboardPage() {
                           {col.id === 'OPEN' && (
                             <Button 
                               size="sm" 
-                              className="w-full h-8 text-[9px]" 
+                              className="w-full h-8 text-[9px] font-bold uppercase tracking-wider" 
                               onClick={() => mutation.mutate({ id: incident.id, status: 'IN_PROGRESS' })}
                               disabled={mutation.isPending}
                             >
@@ -285,7 +312,7 @@ export default function StaffDashboardPage() {
                             <Button 
                               size="sm" 
                               variant="outline" 
-                              className="w-full border-primary/20 text-primary hover:bg-primary/10 h-8 text-[9px] uppercase font-bold" 
+                              className="w-full border-primary/20 text-primary hover:bg-primary/10 h-8 text-[9px] uppercase font-bold tracking-wider" 
                               onClick={() => mutation.mutate({ id: incident.id, status: 'RESOLVED' })}
                               disabled={mutation.isPending}
                             >
@@ -295,17 +322,19 @@ export default function StaffDashboardPage() {
                         </div>
                       </div>
                     </Card>
-                  </motion.div>
+                  </div>
                 ))}
-              {incidents.filter((i: any) => i.status === col.id).length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 opacity-30">
-                  <p className="text-[10px] uppercase font-bold tracking-widest">No incidents</p>
-                </div>
-              )}
+                
+                {columnIncidents.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-10 opacity-30">
+                    <p className="text-[10px] uppercase font-bold tracking-widest">No incidents</p>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </motion.div>
+          );
+        })}
+      </div>
     </DashboardLayout>
   );
 }

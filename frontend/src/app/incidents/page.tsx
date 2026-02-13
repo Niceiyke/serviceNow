@@ -25,6 +25,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState } from 'react';
+import { useWebSockets } from '@/lib/use-websockets';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -86,7 +87,7 @@ export default function IncidentsPage() {
       const response = await api.get(`/incidents/?${params.toString()}`);
       return response.data;
     },
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000, // 30s polling fallback
   });
 
   const resetFilters = () => {
