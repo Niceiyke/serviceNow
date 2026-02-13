@@ -101,3 +101,15 @@ def update_user_role_dept(
     db.commit()
     db.refresh(user)
     return user
+
+@router.get("/assignees", response_model=List[UserInDB])
+def read_assignees(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    # Potential assignees are users with role STAFF, MANAGER, or ADMIN
+    users = db.query(User).filter(
+        User.role.in_([UserRole.STAFF, UserRole.MANAGER, UserRole.ADMIN]),
+        User.is_active == True
+    ).all()
+    return users

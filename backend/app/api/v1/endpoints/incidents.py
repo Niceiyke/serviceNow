@@ -289,20 +289,22 @@ def update_incident(
         incident.status = incident_update.status
 
     # 3. Assignment Logic
-    if incident_update.assignee_id:
+    update_data = incident_update.dict(exclude_unset=True)
+    if "assignee_id" in update_data:
         if current_user.role not in [UserRole.MANAGER, UserRole.ADMIN, UserRole.STAFF]:
              raise HTTPException(status_code=403, detail="Not authorized to assign")
         
+        assignee_id = update_data["assignee_id"]
         audit = AuditLog(
             incident_id=incident.id,
             actor_id=current_user.id,
             action="ASSIGNMENT",
-            old_value=str(incident.assignee_id) if incident.assignee_id else None,
-            new_value=str(incident_update.assignee_id)
+            old_value=str(incident.assignee_id) if incident.assignee_id else "Unassigned",
+            new_value=str(assignee_id) if assignee_id else "Unassigned"
         )
         db.add(audit)
-        incident.assignee_id = incident_update.assignee_id
-        if incident.status == IncidentStatus.OPEN:
+        incident.assignee_id = assignee_id
+        if assignee_id and incident.status == IncidentStatus.OPEN:
             incident.status = IncidentStatus.IN_PROGRESS
 
     # 4. Priority Logic

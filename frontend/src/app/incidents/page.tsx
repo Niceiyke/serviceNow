@@ -97,6 +97,8 @@ export default function IncidentsPage() {
                 <TableHead className="text-primary uppercase text-xs font-bold">Title</TableHead>
                 <TableHead className="text-primary uppercase text-xs font-bold">Status</TableHead>
                 <TableHead className="text-primary uppercase text-xs font-bold">Priority</TableHead>
+                <TableHead className="text-primary uppercase text-xs font-bold">Created By</TableHead>
+                <TableHead className="text-primary uppercase text-xs font-bold">Assigned To</TableHead>
                 <TableHead className="text-primary uppercase text-xs font-bold">Created At</TableHead>
                 <TableHead className="text-right text-primary uppercase text-xs font-bold">Actions</TableHead>
               </TableRow>
@@ -105,12 +107,12 @@ export default function IncidentsPage() {
               {isLoading ? (
                 [...Array(5)].map((_, i) => (
                   <TableRow key={i} className="animate-pulse border-primary/5">
-                    <TableCell colSpan={6} className="h-12 bg-muted/10" />
+                    <TableCell colSpan={8} className="h-12 bg-muted/10" />
                   </TableRow>
                 ))
               ) : incidents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-muted-foreground italic">
+                  <TableCell colSpan={8} className="text-center py-12 text-muted-foreground italic">
                     No incidents found.
                   </TableCell>
                 </TableRow>
@@ -129,6 +131,8 @@ export default function IncidentsPage() {
                         {incident.priority}
                       </span>
                     </TableCell>
+                    <TableCell className="text-xs">{incident.reporter_name}</TableCell>
+                    <TableCell className="text-xs italic text-muted-foreground">{incident.assignee_name || 'Unassigned'}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">
                       {new Date(incident.created_at).toLocaleDateString()}
                     </TableCell>

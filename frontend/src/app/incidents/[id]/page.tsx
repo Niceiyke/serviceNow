@@ -64,6 +64,12 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     queryFn: async () => (await api.get(`/incidents/${resolvedParams.id}/timeline`)).data,
   });
 
+  const { data: assignees = [] } = useQuery({
+    queryKey: ['assignees'],
+    queryFn: async () => (await api.get('/users/assignees')).data,
+    enabled: !!user && ['ADMIN', 'MANAGER', 'STAFF'].includes(user.role),
+  });
+
   const updateMutation = useMutation({
     mutationFn: async (updates: any) => (await api.patch(`/incidents/${resolvedParams.id}`, updates)).data,
     onSuccess: (data) => {
@@ -342,7 +348,26 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                     <label className="text-[10px] font-bold text-primary uppercase flex items-center gap-2">
                       <Shield className="w-3 h-3" /> Assignee
                     </label>
-                    <p className="text-sm ml-5 font-bold">{incident.assignee_name || 'Unassigned'}</p>
+                    {['ADMIN', 'MANAGER', 'STAFF'].includes(user?.role) ? (
+                      <div className="mt-1 ml-5">
+                        <Select 
+                          onValueChange={(val) => updateMutation.mutate({ assignee_id: val === "unassigned" ? null : val })} 
+                          defaultValue={incident.assignee_id || "unassigned"}
+                        >
+                          <SelectTrigger className="w-full bg-black/20 border-primary/20 text-xs h-8">
+                            <SelectValue placeholder="Assign To..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                            {assignees.map((as: any) => (
+                              <SelectItem key={as.id} value={as.id}>{as.full_name || as.email}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <p className="text-sm ml-5 font-bold">{incident.assignee_name || 'Unassigned'}</p>
+                    )}
                   </div>
                   <div className="flex flex-col gap-1 pt-4 border-t border-primary/5">
                     <label className="text-[10px] font-bold text-primary uppercase flex items-center gap-2">
