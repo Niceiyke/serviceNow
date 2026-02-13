@@ -1,9 +1,9 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
-from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory, Comment
+from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory, Comment, SLAPolicy
 from pydantic import BaseModel, UUID4
 from datetime import datetime, timedelta
 from app.schemas.audit import AuditLog as AuditLogSchema
@@ -67,21 +67,25 @@ def get_incident_stats(
     if current_user.role not in [UserRole.ADMIN, UserRole.MANAGER]:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     
-    status_counts = db.query(
-        Incident.status, func.count(Incident.id)
-    ).group_by(Incident.status).all()
+    # Base queries
+    status_query = db.query(Incident.status, func.count(Incident.id))
+    dept_query = db.query(Department.name, func.count(Incident.id)).join(Incident, Incident.department_id == Department.id)
+    priority_query = db.query(Incident.priority, func.count(Incident.id))
+    mttr_query = db.query(Incident).filter(Incident.resolved_at != None)
     
-    dept_counts = db.query(
-        Department.name, func.count(Incident.id)
-    ).join(Incident, Incident.department_id == Department.id).group_by(Department.name).all()
-    
-    priority_counts = db.query(
-        Incident.priority, func.count(Incident.id)
-    ).group_by(Incident.priority).all()
+    # Apply department filter if Manager
+    if current_user.role == UserRole.MANAGER:
+        status_query = status_query.filter(Incident.department_id == current_user.department_id)
+        dept_query = dept_query.filter(Incident.department_id == current_user.department_id)
+        priority_query = priority_query.filter(Incident.department_id == current_user.department_id)
+        mttr_query = mttr_query.filter(Incident.department_id == current_user.department_id)
 
-    # MTTR Calculation (Mean Time to Resolution)
-    # Average of (resolved_at - created_at)
-    resolved_incidents = db.query(Incident).filter(Incident.resolved_at != None).all()
+    status_counts = status_query.group_by(Incident.status).all()
+    dept_counts = dept_query.group_by(Department.name).all()
+    priority_counts = priority_query.group_by(Incident.priority).all()
+
+    # MTTR Calculation
+    resolved_incidents = mttr_query.all()
     
     mttr_total = 0
     mttr_count = len(resolved_incidents)
@@ -101,13 +105,13 @@ def get_incident_stats(
     
     # 30-Day MTTR Trend
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    trend_query = db.query(Incident).filter(Incident.resolved_at >= thirty_days_ago)
     
-    # We fetch incidents resolved in the last 30 days
-    trend_incidents = db.query(Incident).filter(
-        Incident.resolved_at >= thirty_days_ago
-    ).all()
+    if current_user.role == UserRole.MANAGER:
+        trend_query = trend_query.filter(Incident.department_id == current_user.department_id)
+        
+    trend_incidents = trend_query.all()
 
-    # Group by date and calculate average MTTR
     daily_mttr = {}
     for inc in trend_incidents:
         date_str = str(inc.resolved_at.date())
@@ -119,11 +123,24 @@ def get_incident_stats(
         daily_mttr[date_str]["total"] += duration
         daily_mttr[date_str]["count"] += 1
 
-    # Convert to sorted list for the chart
     resolution_trend = [
         {"date": d, "mttr": round(data["total"] / data["count"], 2)} 
         for d, data in sorted(daily_mttr.items())
     ]
+
+    # Additional Manager specific stats: Team Workload
+    team_workload = []
+    if current_user.role == UserRole.MANAGER:
+        team_members = db.query(User).filter(User.department_id == current_user.department_id).all()
+        for member in team_members:
+            open_count = db.query(func.count(Incident.id)).filter(
+                Incident.assignee_id == member.id,
+                Incident.status.in_([IncidentStatus.OPEN, IncidentStatus.IN_PROGRESS])
+            ).scalar()
+            team_workload.append({
+                "name": member.full_name or member.email,
+                "value": open_count
+            })
 
     mttr_stats = {
         "overall": round(avg_mttr, 2),
@@ -135,7 +152,8 @@ def get_incident_stats(
         "by_department": {d: c for d, c in dept_counts},
         "by_priority": {p: d for p, d in priority_counts},
         "mttr": mttr_stats,
-        "trend": resolution_trend
+        "trend": resolution_trend,
+        "team_workload": team_workload
     }
 
 class IncidentBase(BaseModel):
@@ -165,9 +183,11 @@ class IncidentInDB(IncidentBase):
     status: IncidentStatus
     reporter_id: UUID4
     assignee_id: Optional[UUID4]
+    problem_id: Optional[UUID4] = None
     created_at: datetime
     updated_at: datetime
     resolved_at: Optional[datetime]
+    sla_breach_at: Optional[datetime] = None
     
     reporter_name: Optional[str] = None
     department_name: Optional[str] = None
@@ -210,12 +230,19 @@ def create_incident(
     # Use reporter's department if not provided
     dept_id = incident_in.department_id or current_user.department_id
 
+    # Calculate SLA
+    sla_breach_at = None
+    policy = db.query(SLAPolicy).filter(SLAPolicy.priority == incident_in.priority).first()
+    if policy:
+        sla_breach_at = datetime.utcnow() + timedelta(minutes=policy.resolution_time_minutes)
+
     db_obj = Incident(
         **incident_in.dict(exclude={"department_id"}),
         incident_key=incident_key,
         reporter_id=current_user.id,
         department_id=dept_id,
-        status=IncidentStatus.OPEN
+        status=IncidentStatus.OPEN,
+        sla_breach_at=sla_breach_at
     )
     db.add(db_obj)
     db.commit()
@@ -249,12 +276,15 @@ def read_incidents(
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    status: Optional[IncidentStatus] = None,
-    priority: Optional[IncidentPriority] = None,
+    status: Optional[List[IncidentStatus]] = Query(None),
+    priority: Optional[List[IncidentPriority]] = Query(None),
     reporter_id: Optional[UUID4] = None,
     assignee_id: Optional[UUID4] = None,
+    department_id: Optional[UUID4] = None,
+    category_id: Optional[UUID4] = None,
     search: Optional[str] = None,
-    created_at: Optional[datetime] = None,
+    created_at_from: Optional[datetime] = None,
+    created_at_to: Optional[datetime] = None,
     current_user: User = Depends(deps.get_current_active_user),
 ):
     query = db.query(Incident).options(
@@ -269,29 +299,36 @@ def read_incidents(
     if current_user.role == UserRole.REPORTER:
         query = query.filter(Incident.reporter_id == current_user.id)
     elif current_user.role == UserRole.STAFF or current_user.role == UserRole.MANAGER:
+        # Staff and Managers only see incidents from their own department
         query = query.filter(Incident.department_id == current_user.department_id)
     
     # Dynamic filtering
     if status:
-        query = query.filter(Incident.status == status)
+        query = query.filter(Incident.status.in_(status))
     if priority:
-        query = query.filter(Incident.priority == priority)
+        query = query.filter(Incident.priority.in_(priority))
     if reporter_id:
         query = query.filter(Incident.reporter_id == reporter_id)
     if assignee_id:
         query = query.filter(Incident.assignee_id == assignee_id)
+    if department_id:
+        query = query.filter(Incident.department_id == department_id)
+    if category_id:
+        query = query.filter(Incident.category_id == category_id)
+        
     if search:
-        query = query.filter(
+        # Basic full-text search across multiple columns
+        search_filter = (
             (Incident.title.ilike(f"%{search}%")) | 
             (Incident.incident_key.ilike(f"%{search}%")) |
             (Incident.description.ilike(f"%{search}%"))
         )
-    if created_at:
-        # Filter for a specific day
-        start_day = datetime(created_at.year, created_at.month, created_at.day)
-        from datetime import timedelta
-        end_day = start_day + timedelta(days=1)
-        query = query.filter(Incident.created_at >= start_day, Incident.created_at < end_day)
+        query = query.filter(search_filter)
+        
+    if created_at_from:
+        query = query.filter(Incident.created_at >= created_at_from)
+    if created_at_to:
+        query = query.filter(Incident.created_at <= created_at_to)
         
     incidents = query.order_by(Incident.created_at.desc()).offset(skip).limit(limit).all()
     return [IncidentInDB.from_orm_custom(i) for i in incidents]

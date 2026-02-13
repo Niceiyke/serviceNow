@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { 
   Select, 
   SelectContent, 
@@ -21,7 +21,7 @@ import {
 import { Plus, Shield, AlertTriangle, FileText, Send, Paperclip, Loader2 } from 'lucide-react';
 import { MultiFileSelector } from '@/components/incidents/multi-file-selector';
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
 };

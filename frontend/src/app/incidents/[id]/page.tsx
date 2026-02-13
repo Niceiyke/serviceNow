@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { 
   Select, 
@@ -50,12 +50,12 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
 };
@@ -71,6 +71,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   const [isClosureDialogOpen, setIsClosureDialogOpen] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<string | null>(null);
   const [closureReason, setClosureReason] = useState('');
+  const [initiateAnalysis, setInitiateAnalysis] = useState(false);
 
   const { data: user } = useQuery({
     queryKey: ['me'],
@@ -109,11 +110,25 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
   const updateMutation = useMutation({
     mutationFn: async (updates: any) => (await api.patch(`/incidents/${resolvedParams.id}`, updates)).data,
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.setQueryData(['incident', resolvedParams.id], data);
       queryClient.invalidateQueries({ queryKey: ['timeline', resolvedParams.id] });
       setIsEditing(false);
       toast.success('Incident has been updated.');
+
+      if (initiateAnalysis && (pendingStatus === 'RESOLVED' || pendingStatus === 'CLOSED')) {
+        try {
+          const analysisRes = await api.post(`/problems/?incident_id=${resolvedParams.id}`, {
+            title: `Root Cause Analysis: ${incident.title}`,
+            description: `Auto-generated analysis for incident ${incident.incident_key}. Reason for closure: ${closureReason}`,
+            status: 'OPEN'
+          });
+          toast.success('Analysis record initiated & linked.');
+          router.push(`/problems/${analysisRes.data.id}`);
+        } catch (err) {
+          toast.error('Failed to auto-initiate analysis.');
+        }
+      }
     },
     onError: () => toast.error('Failed to update incident.'),
   });
@@ -260,20 +275,32 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                 Confirm {pendingStatus?.toLowerCase()}
               </DialogTitle>
             </DialogHeader>
-            <div className="py-6 space-y-4">
-              <p className="text-xs text-muted-foreground uppercase font-medium tracking-tight">
-                A professional justification is required to {pendingStatus?.toLowerCase()} this incident. 
-                This will be logged as a permanent system comment.
-              </p>
-              <Textarea 
-                placeholder="Provide detailed justification..." 
-                value={closureReason}
-                onChange={(e) => setClosureReason(e.target.value)}
-                className="bg-black/40 border-primary/20 min-h-[120px] text-sm resize-none"
-              />
+            <div className="py-6 space-y-6">
+              <div className="space-y-4">
+                <p className="text-xs text-muted-foreground uppercase font-medium tracking-tight">
+                  A professional justification is required to {pendingStatus?.toLowerCase()} this incident. 
+                  This will be logged as a permanent system comment.
+                </p>
+                <Textarea 
+                  placeholder="Provide detailed justification..." 
+                  value={closureReason}
+                  onChange={(e) => setClosureReason(e.target.value)}
+                  className="bg-black/40 border-primary/20 min-h-[120px] text-sm resize-none"
+                />
+              </div>
+
+              {(pendingStatus === 'RESOLVED' || pendingStatus === 'CLOSED') && (
+                <div className="flex items-center space-x-3 p-4 rounded-xl bg-primary/5 border border-primary/10 group cursor-pointer hover:bg-primary/10 transition-all" onClick={() => setInitiateAnalysis(!initiateAnalysis)}>
+                  <Checkbox checked={initiateAnalysis} onCheckedChange={(v) => setInitiateAnalysis(!!v)} id="analysis-trigger" />
+                  <div className="flex-1">
+                    <Label htmlFor="analysis-trigger" className="text-xs font-bold text-primary cursor-pointer uppercase tracking-widest">Initiate Deep-Dive Analysis</Label>
+                    <p className="text-[10px] text-muted-foreground mt-1">Automatically create and link an Analysis record for Root Cause investigation.</p>
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={() => { setIsClosureDialogOpen(false); setClosureReason(''); }} className="text-[10px] uppercase font-bold">
+              <Button variant="ghost" onClick={() => { setIsClosureDialogOpen(false); setClosureReason(''); setInitiateAnalysis(false); }} className="text-[10px] uppercase font-bold">
                 Cancel
               </Button>
               <Button 
@@ -281,7 +308,6 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                 onClick={() => {
                   updateMutation.mutate({ status: pendingStatus, status_comment: closureReason });
                   setIsClosureDialogOpen(false);
-                  setClosureReason('');
                 }}
                 className="gap-2"
               >

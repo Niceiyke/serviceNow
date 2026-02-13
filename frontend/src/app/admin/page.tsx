@@ -5,15 +5,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { UserManagement } from '@/components/admin/user-management';
 import { DepartmentManagement } from '@/components/admin/department-management';
 import { CategoryManagement } from '@/components/admin/category-management';
-import { motion } from 'framer-motion';
-import { ShieldAlert, Users, Landmark, Tag } from 'lucide-react';
+import { CatalogManagement } from '@/components/admin/catalog-management';
+import { motion, Variants } from 'framer-motion';
+import { ShieldAlert, Users, Landmark, Tag, ShoppingCart } from 'lucide-react';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
 };
@@ -52,6 +53,10 @@ export default function AdminPortal() {
                 <Tag className="w-4 h-4" />
                 Categories
               </TabsTrigger>
+              <TabsTrigger value="catalog" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 px-6">
+                <ShoppingCart className="w-4 h-4" />
+                Catalog
+              </TabsTrigger>
             </TabsList>
             
             <TabsContent value="users" className="focus-visible:outline-none">
@@ -64,6 +69,10 @@ export default function AdminPortal() {
             
             <TabsContent value="categories" className="focus-visible:outline-none">
               <CategoryManagement />
+            </TabsContent>
+
+            <TabsContent value="catalog" className="focus-visible:outline-none">
+              <CatalogManagement />
             </TabsContent>
           </Tabs>
         </motion.div>

@@ -72,17 +72,22 @@ export default function DashboardPage() {
   const deptData = stats?.by_department ? Object.entries(stats.by_department).map(([name, value]) => ({ name, value })) : [];
   const statusData = stats?.by_status ? Object.entries(stats.by_status).map(([name, value]) => ({ name, value })) : [];
   const mttrData = stats?.mttr?.by_priority ? Object.entries(stats.mttr.by_priority).map(([name, value]) => ({ name, value })) : [];
+  const teamWorkload = stats?.team_workload || [];
 
   return (
     <DashboardLayout>
       <div className="space-y-10 pb-20">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight mb-2">System Performance</h1>
+            <h1 className="text-4xl font-bold tracking-tight mb-2">
+              {user.role === 'MANAGER' ? 'Department Performance' : 'System Performance'}
+            </h1>
             <p className="text-muted-foreground">Operational intelligence and resolution velocity.</p>
           </div>
           <div className="bg-primary/10 border border-primary/20 px-6 py-3 rounded-lg text-center">
-             <span className="text-[10px] uppercase font-black text-primary/60 block tracking-widest">Global MTTR</span>
+             <span className="text-[10px] uppercase font-black text-primary/60 block tracking-widest">
+               {user.role === 'MANAGER' ? 'DEPT MTTR' : 'GLOBAL MTTR'}
+             </span>
              <span className="text-3xl font-mono font-bold">{stats?.mttr?.overall || 0}h</span>
           </div>
         </div>
@@ -95,22 +100,41 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="border-primary/10 bg-black/20">
-            <CardHeader className="border-b border-primary/5">
-              <CardTitle className="text-xs uppercase tracking-[0.2em] font-black opacity-60">Resolution Speed (Priority)</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[350px] pt-6">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mttrData} layout="vertical" margin={{ left: 20 }}>
-                  <CartesianGrid stroke="#222" horizontal={false} />
-                  <XAxis type="number" stroke="#444" fontSize={10} />
-                  <YAxis dataKey="name" type="category" stroke="#888" fontSize={10} width={80} />
-                  <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{backgroundColor: '#000', border: '1px solid #333'}} />
-                  <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {user.role === 'MANAGER' ? (
+            <Card className="border-primary/10 bg-black/20">
+              <CardHeader className="border-b border-primary/5">
+                <CardTitle className="text-xs uppercase tracking-[0.2em] font-black opacity-60">Team Workload (Open Tasks)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[350px] pt-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={teamWorkload} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid stroke="#222" horizontal={false} />
+                    <XAxis type="number" stroke="#444" fontSize={10} />
+                    <YAxis dataKey="name" type="category" stroke="#888" fontSize={10} width={100} />
+                    <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{backgroundColor: '#000', border: '1px solid #333'}} />
+                    <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-primary/10 bg-black/20">
+              <CardHeader className="border-b border-primary/5">
+                <CardTitle className="text-xs uppercase tracking-[0.2em] font-black opacity-60">Resolution Speed (Priority)</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[350px] pt-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={mttrData} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid stroke="#222" horizontal={false} />
+                    <XAxis type="number" stroke="#444" fontSize={10} />
+                    <YAxis dataKey="name" type="category" stroke="#888" fontSize={10} width={80} />
+                    <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{backgroundColor: '#000', border: '1px solid #333'}} />
+                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={24} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-primary/10 bg-black/20">
             <CardHeader className="border-b border-primary/5">
@@ -172,22 +196,24 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="lg:col-span-2 border-primary/10 bg-black/20">
-            <CardHeader className="border-b border-primary/5">
-              <CardTitle className="text-xs uppercase tracking-[0.2em] font-black opacity-60">Department Workload</CardTitle>
-            </CardHeader>
-            <CardContent className="h-[350px] pt-6">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deptData}>
-                  <CartesianGrid stroke="#222" vertical={false} />
-                  <XAxis dataKey="name" stroke="#444" fontSize={10} />
-                  <YAxis stroke="#444" fontSize={10} />
-                  <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{backgroundColor: '#000', border: '1px solid #333'}} />
-                  <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {user.role === 'ADMIN' && (
+            <Card className="lg:col-span-2 border-primary/10 bg-black/20">
+              <CardHeader className="border-b border-primary/5">
+                <CardTitle className="text-xs uppercase tracking-[0.2em] font-black opacity-60">Department Workload</CardTitle>
+              </CardHeader>
+              <CardContent className="h-[350px] pt-6">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={deptData}>
+                    <CartesianGrid stroke="#222" vertical={false} />
+                    <XAxis dataKey="name" stroke="#444" fontSize={10} />
+                    <YAxis stroke="#444" fontSize={10} />
+                    <Tooltip cursor={{fill: '#ffffff05'}} contentStyle={{backgroundColor: '#000', border: '1px solid #333'}} />
+                    <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </DashboardLayout>

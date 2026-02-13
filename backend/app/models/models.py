@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import Column, String, Boolean, Enum, ForeignKey, DateTime, Text
+from sqlalchemy import Column, String, Boolean, Enum, ForeignKey, DateTime, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -104,6 +104,100 @@ class Incident(Base):
     comments = relationship("Comment", back_populates="incident")
     audit_logs = relationship("AuditLog", back_populates="incident")
     attachments = relationship("Attachment", back_populates="incident")
+
+    problem_id = Column(UUID(as_uuid=True), ForeignKey("problems.id"), nullable=True)
+    problem = relationship("Problem", back_populates="incidents")
+
+    service_item_id = Column(UUID(as_uuid=True), ForeignKey("service_items.id"), nullable=True)
+    service_item = relationship("ServiceItem", back_populates="incidents")
+
+    sla_breach_at = Column(DateTime, nullable=True)
+
+
+class Problem(Base):
+    __tablename__ = "problems"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    root_cause = Column(Text)
+    rcfa_analysis = Column(Text)  # Professional Root Cause Failure Analysis
+    five_whys = Column(Text)     # 5 Whys Analysis stored as JSON or formatted text
+    countermeasure = Column(Text) # Corrective action to prevent recurrence
+    function_failure = Column(Text) # The loss of function
+    failure_mode = Column(Text)     # How the failure manifests
+    status = Column(String, default="OPEN")  # OPEN, DEFINITION, ANALYSIS, COUNTERMEASURE, MONITORING, CLOSED, CANCELLED
+    
+    creator_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+    creator = relationship("User", foreign_keys=[creator_id])
+    incidents = relationship("Incident", back_populates="problem")
+    change_requests = relationship("ChangeRequest", back_populates="problem")
+    actions = relationship("ProblemAction", back_populates="problem")
+
+
+class ProblemAction(Base):
+    __tablename__ = "problem_actions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    problem_id = Column(UUID(as_uuid=True), ForeignKey("problems.id"), nullable=False)
+    description = Column(Text, nullable=False)
+    assignee_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String, default="PENDING") # PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    problem = relationship("Problem", back_populates="actions")
+    assignee = relationship("User")
+
+
+class ChangeRequest(Base):
+    __tablename__ = "change_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String, nullable=False)
+    description = Column(Text)
+    risk_level = Column(String, default="LOW")  # LOW, MEDIUM, HIGH, CRITICAL
+    status = Column(String, default="DRAFT")  # DRAFT, SUBMITTED, APPROVED, IMPLEMENTED, REVIEWED, CLOSED
+    
+    problem_id = Column(UUID(as_uuid=True), ForeignKey("problems.id"), nullable=True)
+    requester_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    scheduled_start = Column(DateTime, nullable=True)
+    scheduled_end = Column(DateTime, nullable=True)
+
+    problem = relationship("Problem", back_populates="change_requests")
+    requester = relationship("User")
+
+
+class ServiceItem(Base):
+    __tablename__ = "service_items"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    icon = Column(String, default="box")  # frontend icon name
+    base_priority = Column(Enum(IncidentPriority), default=IncidentPriority.MEDIUM)
+    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"), nullable=False)
+    
+    is_active = Column(Boolean, default=True)
+    
+    incidents = relationship("Incident", back_populates="service_item")
+    category = relationship("Category")
+
+
+class SLAPolicy(Base):
+    __tablename__ = "sla_policies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String, nullable=False)
+    priority = Column(Enum(IncidentPriority), unique=True, nullable=False)
+    response_time_minutes = Column(Integer, default=60)
+    resolution_time_minutes = Column(Integer, default=1440)  # 24 hours
+
 
 class Comment(Base):
     __tablename__ = "comments"

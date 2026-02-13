@@ -11,7 +11,10 @@ import {
   X, 
   User,
   Shield,
-  ShieldAlert
+  ShieldAlert,
+  ShoppingCart,
+  AlertTriangle,
+  ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -19,7 +22,10 @@ import { Button } from '@/components/ui/button';
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Incidents', href: '/incidents', icon: Ticket },
+  { label: 'Service Catalog', href: '/catalog', icon: ShoppingCart },
   { label: 'Staff Board', href: '/staff/dashboard', icon: Shield, roles: ['STAFF', 'MANAGER', 'ADMIN'] },
+  { label: 'Analysis Mgmt', href: '/problems', icon: AlertTriangle, roles: ['STAFF', 'MANAGER', 'ADMIN'] },
+  { label: 'Actions Queue', href: '/problems/actions', icon: ClipboardList },
   { label: 'Admin Console', href: '/admin', icon: ShieldAlert, role: 'ADMIN' },
   { label: 'Profile', href: '/profile', icon: User },
 ];

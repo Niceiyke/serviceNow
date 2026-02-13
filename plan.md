@@ -70,7 +70,7 @@ A professional, fullstack incident management system built with **FastAPI**, **N
 - [x] **Traefik Routing:** `service-now.wordlyte.com` and `api-service-now.wordlyte.com`.
 - [x] **HTTPS/TLS:** Fully configured with Traefik and Cloudflare.
 - [x] **Migrations:** Alembic for versioned schema updates.
-- [ ] **CI/CD:** GitHub Actions for linting, type-checking, and testing.
+- [x] **CI/CD:** GitHub Actions for linting, type-checking, and testing.
 - [x] **Health Checks:** `/health` endpoint with DB connectivity check.
 
 ---
@@ -81,6 +81,6 @@ A professional, fullstack incident management system built with **FastAPI**, **N
 - [x] **User Management:** Build `/admin/users` to manage roles and department assignments.
 - [x] **Admin Analytics:** Visual charts using Recharts for incident trends and department workloads.
 - [x] **Staff Experience:** Kanban-style board or priority-sorted feed for staff members.
-- [ ] **Real-time UX:** Implement SWR/React Query for automatic data refreshing.
+- [x] **Real-time UX:** Implement SWR/React Query for automatic data refreshing.
 - [x] **UX Polish:** Replace alerts with Toast notifications and add empty states.
 - [x] **Notifications:** Background tasks for email alerts on status changes.

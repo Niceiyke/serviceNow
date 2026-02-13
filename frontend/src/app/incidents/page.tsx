@@ -1,6 +1,7 @@
 'use client';
 
 import api from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { 
   Table, 
@@ -23,11 +24,11 @@ import {
 import { Plus, Ticket, Search, Filter, X } from 'lucide-react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { useState } from 'react';
 import { useWebSockets } from '@/lib/use-websockets';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -37,7 +38,7 @@ const containerVariants = {
   }
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,
@@ -56,6 +57,7 @@ export default function IncidentsPage() {
   const [assigneeId, setAssigneeId] = useState('all');
   const [reporterId, setReporterId] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [activeQuickView, setActiveQuickView] = useState('all');
 
   const { data: user } = useQuery({
     queryKey: ['me'],
@@ -75,10 +77,25 @@ export default function IncidentsPage() {
   });
 
   const { data: incidents = [], isLoading } = useQuery({
-    queryKey: ['incidents', { search, status, priority, assigneeId, reporterId }],
+    queryKey: ['incidents', { search, status, priority, assigneeId, reporterId, activeQuickView }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.append('search', search);
+      
+      // Apply Quick View filters
+      if (activeQuickView === 'assigned-to-me' && user) {
+        params.append('assignee_id', user.id);
+      } else if (activeQuickView === 'my-reports' && user) {
+        params.append('reporter_id', user.id);
+      } else if (activeQuickView === 'high-priority') {
+        params.append('priority', 'HIGH');
+        params.append('priority', 'CRITICAL');
+      } else if (activeQuickView === 'open-tickets') {
+        params.append('status', 'OPEN');
+        params.append('status', 'IN_PROGRESS');
+      }
+
+      // Apply Manual filters (override quick view if set)
       if (status !== 'all') params.append('status', status);
       if (priority !== 'all') params.append('priority', priority);
       if (assigneeId !== 'all') params.append('assignee_id', assigneeId);
@@ -87,7 +104,7 @@ export default function IncidentsPage() {
       const response = await api.get(`/incidents/?${params.toString()}`);
       return response.data;
     },
-    refetchInterval: 30000, // 30s polling fallback
+    refetchInterval: 30000,
   });
 
   const resetFilters = () => {
@@ -96,7 +113,16 @@ export default function IncidentsPage() {
     setPriority('all');
     setAssigneeId('all');
     setReporterId('all');
+    setActiveQuickView('all');
   };
+
+  const QUICK_VIEWS = [
+    { id: 'all', label: 'All Incidents' },
+    { id: 'assigned-to-me', label: 'Assigned to Me', roles: ['ADMIN', 'MANAGER', 'STAFF'] },
+    { id: 'my-reports', label: 'My Reports' },
+    { id: 'open-tickets', label: 'Active Tasks' },
+    { id: 'high-priority', label: 'High Priority' },
+  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -134,7 +160,7 @@ export default function IncidentsPage() {
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={showFilters ? 'bg-primary/10 border-primary' : ''}>
               <Filter className="w-4 h-4 mr-2" />
-              Filters
+              Advanced Filters
             </Button>
             <Button asChild>
               <Link href="/incidents/new">
@@ -143,6 +169,25 @@ export default function IncidentsPage() {
               </Link>
             </Button>
           </div>
+        </motion.div>
+
+        <motion.div variants={itemVariants} className="flex flex-wrap gap-2 mb-6">
+          {QUICK_VIEWS.filter(v => !v.roles || (user && v.roles.includes(user.role))).map((view) => (
+            <Button
+              key={view.id}
+              variant="ghost"
+              size="sm"
+              onClick={() => setActiveQuickView(view.id)}
+              className={cn(
+                "h-8 px-4 text-[10px] uppercase font-bold tracking-widest transition-all",
+                activeQuickView === view.id 
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20" 
+                  : "bg-black/20 text-muted-foreground hover:bg-black/40 hover:text-primary"
+              )}
+            >
+              {view.label}
+            </Button>
+          ))}
         </motion.div>
 
         <AnimatePresence>

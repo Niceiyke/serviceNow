@@ -9,8 +9,18 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Hammer, CheckCircle2, AlertCircle, Search, Filter, X } from 'lucide-react';
-import { useState } from 'react';
+import { 
+  Shield, 
+  Hammer, 
+  CheckCircle2, 
+  AlertCircle, 
+  Search, 
+  Filter, 
+  X,
+  Clock,
+  AlertTriangle
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { useWebSockets } from '@/lib/use-websockets';
@@ -21,6 +31,9 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TeamWorkload } from '@/components/admin/team-workload';
+import { LayoutGrid, Users } from 'lucide-react';
 
 const STATUS_COLUMNS = [
   { id: 'OPEN', label: 'Open', icon: AlertCircle, color: 'text-sky-500' },
@@ -36,6 +49,47 @@ const containerVariants = {
 const itemVariants = {
   hidden: { scale: 0.95, opacity: 0 },
   visible: { scale: 1, opacity: 1, transition: { type: 'spring', stiffness: 100 } }
+};
+
+const SLATimer = ({ breachAt, status }: { breachAt: string | null, status: string }) => {
+  const [timeLeft, setTimeLeft] = useState<string>('');
+  const [isBreached, setIsBreached] = useState(false);
+
+  useEffect(() => {
+    if (!breachAt || status === 'RESOLVED' || status === 'CLOSED' || status === 'CANCELLED') {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const breach = new Date(breachAt);
+      const diff = breach.getTime() - now.getTime();
+
+      if (diff <= 0) {
+        setIsBreached(true);
+        setTimeLeft('SLA BREACHED');
+        clearInterval(interval);
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setTimeLeft(`${hours}h ${minutes}m left`);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [breachAt, status]);
+
+  if (!breachAt || status === 'RESOLVED' || status === 'CLOSED' || status === 'CANCELLED') return null;
+
+  return (
+    <div className={cn(
+      "flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider mt-2",
+      isBreached ? "text-red-500 animate-pulse" : "text-amber-500"
+    )}>
+      <Clock className="w-3 h-3" />
+      {timeLeft}
+    </div>
+  );
 };
 
 export default function StaffDashboardPage() {
@@ -149,25 +203,51 @@ export default function StaffDashboardPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex items-center justify-between gap-4 mb-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-10">
         <div className="flex items-center gap-4">
           <Shield className="w-10 h-10 text-primary" />
-          <h1 className="text-3xl font-bold tracking-tight">Staff Dashboard</h1>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Staff Operations</h1>
+            <p className="text-xs text-muted-foreground uppercase font-bold tracking-widest mt-1">Department Intelligence</p>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={showFilters ? 'bg-primary/10 border-primary' : ''}>
-          <Filter className="w-4 h-4 mr-2" />
-          Filters
-        </Button>
+        
+        {user?.role === 'MANAGER' && (
+          <div className="bg-primary/5 border border-primary/10 p-1 rounded-lg">
+            <Button variant="ghost" size="sm" onClick={() => setShowFilters(!showFilters)} className={cn("text-[10px] uppercase font-bold tracking-widest h-8", showFilters ? 'bg-primary/10 text-primary' : 'text-muted-foreground')}>
+              <Filter className="w-3 h-3 mr-2" />
+              Toggle Filters
+            </Button>
+          </div>
+        )}
       </div>
 
-      <AnimatePresence>
-        {showFilters && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
+      <Tabs defaultValue="board" className="w-full space-y-10">
+        <div className="flex justify-between items-center border-b border-primary/10 pb-4">
+          <TabsList className="bg-black/20 border border-primary/10 p-1">
+            <TabsTrigger value="board" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 px-6 text-[10px] uppercase font-black tracking-widest h-8">
+              <LayoutGrid className="w-3 h-3" />
+              Kanban Board
+            </TabsTrigger>
+            {user?.role === 'MANAGER' && (
+              <TabsTrigger value="team" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 px-6 text-[10px] uppercase font-black tracking-widest h-8">
+                <Users className="w-3 h-3" />
+                Team Workload
+              </TabsTrigger>
+            )}
+          </TabsList>
+        </div>
+
+        <TabsContent value="board" className="space-y-10 outline-none">
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                {/* ... existing filters ... */}
             <div className="p-6 bg-card border border-primary/10 rounded-md grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10 shadow-lg">
               <div className="space-y-1">
                 <label className="text-[10px] uppercase font-bold text-primary">Search</label>
@@ -296,6 +376,8 @@ export default function StaffDashboardPage() {
                         <p className="text-[11px] text-muted-foreground line-clamp-2">
                           {incident.description}
                         </p>
+
+                        <SLATimer breachAt={incident.sla_breach_at} status={incident.status} />
                         
                         <div className="flex gap-2 pt-2">
                           {col.id === 'OPEN' && (
@@ -335,6 +417,14 @@ export default function StaffDashboardPage() {
           );
         })}
       </div>
+        </TabsContent>
+
+        {user?.role === 'MANAGER' && (
+          <TabsContent value="team" className="outline-none">
+            <TeamWorkload departmentId={user.department_id} />
+          </TabsContent>
+        )}
+      </Tabs>
     </DashboardLayout>
   );
 }
