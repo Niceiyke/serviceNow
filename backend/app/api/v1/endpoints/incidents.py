@@ -34,6 +34,22 @@ def read_incident_timeline(
         actor = db.query(User).filter(User.id == log.actor_id).first()
         log_data = AuditLogSchema.from_orm(log)
         log_data.actor_name = actor.full_name or actor.email if actor else "System"
+        
+        # Try to resolve old/new values if they are UUIDs (for existing logs)
+        if log.action == "ASSIGNMENT":
+            import uuid
+            for field in ["old_value", "new_value"]:
+                val = getattr(log, field)
+                if val and val != "Unassigned":
+                    try:
+                        # Check if it's a valid UUID
+                        uuid_val = uuid.UUID(val)
+                        user = db.query(User).filter(User.id == uuid_val).first()
+                        if user:
+                            setattr(log_data, field, user.full_name or user.email)
+                    except (ValueError, TypeError):
+                        pass # Already a name or something else
+        
         results.append(log_data)
         
     return results
@@ -322,12 +338,17 @@ def update_incident(
              raise HTTPException(status_code=403, detail="Not authorized to assign")
         
         assignee_id = update_data["assignee_id"]
+        
+        # Fetch names for better logging
+        old_assignee = db.query(User).filter(User.id == incident.assignee_id).first() if incident.assignee_id else None
+        new_assignee = db.query(User).filter(User.id == assignee_id).first() if assignee_id else None
+        
         audit = AuditLog(
             incident_id=incident.id,
             actor_id=current_user.id,
             action="ASSIGNMENT",
-            old_value=str(incident.assignee_id) if incident.assignee_id else "Unassigned",
-            new_value=str(assignee_id) if assignee_id else "Unassigned"
+            old_value=old_assignee.full_name or old_assignee.email if old_assignee else "Unassigned",
+            new_value=new_assignee.full_name or new_assignee.email if new_assignee else "Unassigned"
         )
         db.add(audit)
         incident.assignee_id = assignee_id
