@@ -86,6 +86,7 @@ export default function IncidentsPage() {
       const response = await api.get(`/incidents/?${params.toString()}`);
       return response.data;
     },
+    refetchInterval: 30000, // Refresh every 30 seconds
   });
 
   const resetFilters = () => {

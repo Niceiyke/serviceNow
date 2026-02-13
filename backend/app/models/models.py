@@ -115,6 +115,7 @@ class Comment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     incident = relationship("Incident", back_populates="comments")
+    author = relationship("User", foreign_keys=[author_id])
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

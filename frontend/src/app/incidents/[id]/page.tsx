@@ -20,7 +20,9 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Scroll, MessageSquare, Shield, Clock, User, Landmark, Ticket, History, ArrowRight } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Scroll, MessageSquare, Shield, Clock, User, Landmark, Ticket, History, ArrowRight, Lock } from 'lucide-react';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -37,6 +39,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   const router = useRouter();
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
+  const [isInternal, setIsInternal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ title: '', description: '' });
 
@@ -56,7 +59,12 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
 
   const { data: comments = [] } = useQuery({
     queryKey: ['comments', resolvedParams.id],
-    queryFn: async () => (await api.get(`/incidents/${resolvedParams.id}/comments`)).data,
+    queryFn: async () => {
+      const res = await api.get(`/incidents/${resolvedParams.id}/comments`);
+      // Since backend doesn't return author_name in CommentInDB yet, let's fetch users if we need to, 
+      // but for now we'll assume the backend will be updated or we'll display "System User"
+      return res.data;
+    },
   });
 
   const { data: timeline = [] } = useQuery({
@@ -82,10 +90,11 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
   });
 
   const commentMutation = useMutation({
-    mutationFn: async (content: string) => (await api.post(`/incidents/${resolvedParams.id}/comments`, { content, is_internal: false })).data,
+    mutationFn: async (vars: { content: string, is_internal: boolean }) => (await api.post(`/incidents/${resolvedParams.id}/comments`, vars)).data,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments', resolvedParams.id] });
       setNewComment('');
+      setIsInternal(false);
       toast.success('Comment has been added.');
     },
     onError: () => toast.error('Failed to add comment.'),
@@ -242,12 +251,23 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                           <p className="text-sm text-muted-foreground italic text-center py-4">No comments posted yet.</p>
                         ) : (
                           comments.map((comment: any) => (
-                            <div key={comment.id} className="p-4 bg-muted/20 border border-primary/5 rounded-sm relative group">
+                            <div key={comment.id} className={cn(
+                              "p-4 border rounded-sm relative group transition-all",
+                              comment.is_internal 
+                                ? "bg-amber-950/20 border-amber-500/30" 
+                                : "bg-muted/20 border-primary/5"
+                            )}>
+                              {comment.is_internal && (
+                                <div className="absolute top-2 right-2 flex items-center gap-1 text-[9px] font-bold text-amber-500 uppercase">
+                                  <Lock className="w-3 h-3" />
+                                  Internal Note
+                                </div>
+                              )}
                               <p className="text-sm text-foreground/90 mb-2 leading-relaxed">{comment.content}</p>
                               <div className="flex justify-between items-center opacity-60">
                                 <span className="text-[10px] uppercase font-bold flex items-center gap-1">
                                   <User className="w-3 h-3" />
-                                  System User
+                                  {comment.author_name || 'System User'}
                                 </span>
                                 <span className="text-[10px] uppercase font-bold flex items-center gap-1">
                                   <Clock className="w-3 h-3" />
@@ -259,15 +279,29 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                         )}
                       </div>
                       
-                      <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(newComment); }} className="space-y-3 pt-6 border-t border-primary/10">
+                      <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate({ content: newComment, is_internal: isInternal }); }} className="space-y-4 pt-6 border-t border-primary/10">
                         <Textarea 
                           placeholder="Add a comment..." 
                           value={newComment}
                           onChange={(e) => setNewComment(e.target.value)}
                           className="bg-black/20 border-primary/20 focus:border-primary/40 rounded-none min-h-[100px]"
                         />
-                        <div className="flex justify-end">
-                          <Button type="submit" disabled={commentMutation.isPending}>
+                        <div className="flex justify-between items-center">
+                          {user?.role !== 'REPORTER' ? (
+                            <div className="flex items-center space-x-2">
+                              <Checkbox 
+                                id="internal" 
+                                checked={isInternal} 
+                                onCheckedChange={(checked) => setIsInternal(!!checked)}
+                                className="border-primary/30 data-[state=checked]:bg-amber-600 data-[state=checked]:border-amber-600"
+                              />
+                              <Label htmlFor="internal" className="text-xs font-bold uppercase text-muted-foreground cursor-pointer flex items-center gap-1">
+                                <Lock className="w-3 h-3" />
+                                Internal Note
+                              </Label>
+                            </div>
+                          ) : <div />}
+                          <Button type="submit" disabled={commentMutation.isPending || !newComment.trim()}>
                             {commentMutation.isPending ? 'Posting...' : 'Post Comment'}
                           </Button>
                         </div>

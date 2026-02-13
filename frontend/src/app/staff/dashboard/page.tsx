@@ -73,6 +73,7 @@ export default function StaffDashboardPage() {
       const response = await api.get(`/incidents/?${params.toString()}`);
       return response.data;
     },
+    refetchInterval: 15000, // Refresh every 15 seconds for staff board
   });
 
   const resetFilters = () => {

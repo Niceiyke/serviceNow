@@ -17,10 +17,18 @@ class CommentInDB(CommentBase):
     id: UUID4
     incident_id: UUID4
     author_id: UUID4
+    author_name: Optional[str] = None
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_orm_custom(cls, obj: Comment):
+        return cls(
+            **obj.__dict__,
+            author_name=obj.author.full_name or obj.author.email if hasattr(obj, 'author') and obj.author else None
+        )
 
 @router.get("/{incident_id}/comments", response_model=List[CommentInDB])
 def read_comments(
@@ -32,13 +40,14 @@ def read_comments(
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
     
-    query = db.query(Comment).filter(Comment.incident_id == incident_id)
+    query = db.query(Comment).options(joinedload(Comment.author)).filter(Comment.incident_id == incident_id)
     
     # Reporters cannot see internal comments
     if current_user.role == UserRole.REPORTER:
         query = query.filter(Comment.is_internal == False)
         
-    return query.all()
+    comments = query.order_by(Comment.created_at.asc()).all()
+    return [CommentInDB.from_orm_custom(c) for c in comments]
 
 @router.post("/{incident_id}/comments", response_model=CommentInDB)
 def create_comment(
@@ -63,4 +72,7 @@ def create_comment(
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
-    return db_obj
+    
+    # Reload with author to return name
+    db_obj = db.query(Comment).options(joinedload(Comment.author)).filter(Comment.id == db_obj.id).first()
+    return CommentInDB.from_orm_custom(db_obj)
