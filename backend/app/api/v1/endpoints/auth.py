@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from app.core import security
@@ -6,13 +6,18 @@ from app.core.database import get_db
 from app.models.models import User
 from app.schemas.user import UserCreate, UserInDB, Token
 from datetime import timedelta
+from app.services.notifications import NotificationService
 
 from app.api import deps
 
 router = APIRouter()
 
 @router.post("/register", response_model=UserInDB)
-def register(user_in: UserCreate, db: Session = Depends(get_db)):
+def register(
+    user_in: UserCreate, 
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
         raise HTTPException(
@@ -30,6 +35,9 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     db.add(db_obj)
     db.commit()
     db.refresh(db_obj)
+    
+    background_tasks.add_task(NotificationService.send_welcome_email, db_obj)
+    
     return db_obj
 
 @router.post("/login", response_model=Token)

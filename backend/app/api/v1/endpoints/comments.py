@@ -1,11 +1,12 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload
 from app.api import deps
 from app.core.database import get_db
-from app.models.models import Incident, Comment, User, UserRole
+from app.models.models import Incident, Comment, User, UserRole, IncidentStatus
 from pydantic import BaseModel, UUID4
 from datetime import datetime
+from app.services.notifications import NotificationService
 
 router = APIRouter()
 
@@ -53,6 +54,7 @@ def read_comments(
 def create_comment(
     incident_id: UUID4,
     comment_in: CommentBase,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
@@ -79,6 +81,13 @@ def create_comment(
     db.commit()
     db.refresh(db_obj)
     
-    # Reload with author to return name
-    db_obj = db.query(Comment).options(joinedload(Comment.author)).filter(Comment.id == db_obj.id).first()
+    # Reload with author and incident relationships for notification
+    db_obj = db.query(Comment).options(
+        joinedload(Comment.author),
+        joinedload(Comment.incident).joinedload(Incident.reporter),
+        joinedload(Comment.incident).joinedload(Incident.assignee)
+    ).filter(Comment.id == db_obj.id).first()
+
+    background_tasks.add_task(NotificationService.send_new_comment_notification, db_obj.incident, db_obj, current_user)
+
     return CommentInDB.from_orm_custom(db_obj)

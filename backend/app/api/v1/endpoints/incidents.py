@@ -8,6 +8,7 @@ from pydantic import BaseModel, UUID4
 from datetime import datetime, timedelta
 from app.schemas.audit import AuditLog as AuditLogSchema
 from sqlalchemy import func
+from app.services.notifications import NotificationService
 
 router = APIRouter()
 
@@ -192,12 +193,10 @@ VALID_TRANSITIONS = {
     IncidentStatus.CANCELLED: []
 }
 
-def send_status_notification(email: str, incident_key: str, new_status: str):
-    print(f"NOTIFICATION: Sending email to {email} - Incident {incident_key} is now {new_status}")
-
 @router.post("/", response_model=IncidentInDB)
 def create_incident(
     incident_in: IncidentCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_active_user),
 ):
@@ -227,6 +226,8 @@ def create_incident(
     )
     db.add(audit)
     db.commit()
+
+    background_tasks.add_task(NotificationService.send_incident_creation_notification, db_obj, current_user)
     
     db_obj = db.query(Incident).options(
         joinedload(Incident.reporter),
@@ -388,14 +389,15 @@ def update_incident(
         )
         db.add(audit)
         
+        background_tasks.add_task(
+            NotificationService.send_status_change_notification, 
+            incident, 
+            incident.status, 
+            incident_update.status
+        )
+        
         if incident_update.status == IncidentStatus.RESOLVED:
             incident.resolved_at = datetime.utcnow()
-            background_tasks.add_task(
-                send_status_notification, 
-                incident.reporter.email, 
-                incident.incident_key, 
-                incident_update.status
-            )
         
         incident.status = incident_update.status
 
@@ -423,6 +425,10 @@ def update_incident(
         )
         db.add(audit)
         incident.assignee_id = assignee_id
+        
+        if new_assignee:
+            background_tasks.add_task(NotificationService.send_assignment_notification, incident, new_assignee)
+            
         if assignee_id and incident.status == IncidentStatus.OPEN:
             incident.status = IncidentStatus.IN_PROGRESS
 
