@@ -18,7 +18,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Plus, Shield, AlertTriangle, FileText, Send } from 'lucide-react';
+import { Plus, Shield, AlertTriangle, FileText, Send, Paperclip, Loader2 } from 'lucide-react';
+import { MultiFileSelector } from '@/components/incidents/multi-file-selector';
 
 const itemVariants = {
   hidden: { y: 20, opacity: 0 },
@@ -32,6 +33,8 @@ export default function NewIncidentPage() {
   const [selectedCat, setSelectedCat] = useState('');
   const [selectedSub, setSelectedSub] = useState('');
   const [priority, setPriority] = useState('MEDIUM');
+  const [files, setFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
@@ -40,12 +43,32 @@ export default function NewIncidentPage() {
 
   const mutation = useMutation({
     mutationFn: async (newData: any) => (await api.post('/incidents/', newData)).data,
-    onSuccess: () => {
+    onSuccess: async (incident) => {
+      // Handle file uploads if any
+      if (files.length > 0) {
+        toast.info(`Uploading ${files.length} attachments...`);
+        const uploadPromises = files.map(file => {
+          const formData = new FormData();
+          formData.append('file', file);
+          return api.post(`/incidents/${incident.id}/upload`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        });
+        
+        try {
+          await Promise.all(uploadPromises);
+          toast.success('Attachments uploaded.');
+        } catch (err) {
+          toast.error('Some attachments failed to upload.');
+        }
+      }
+      
       toast.success('Incident has been successfully reported.');
-      router.push('/incidents');
+      router.push(`/incidents/${incident.id}`);
     },
     onError: () => {
       toast.error('Failed to report incident. Please check your input.');
+      setIsSubmitting(false);
     },
   });
 
@@ -59,6 +82,7 @@ export default function NewIncidentPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     mutation.mutate({
       title,
       description,
@@ -164,13 +188,22 @@ export default function NewIncidentPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="pt-4 border-t border-primary/5">
+                <MultiFileSelector files={files} onFilesChange={setFiles} />
+              </div>
             </CardContent>
             <CardFooter className="flex justify-between border-t border-primary/10 pt-6 bg-muted/10">
-              <Button type="button" variant="ghost" onClick={() => router.back()} className="text-muted-foreground uppercase text-[10px] font-bold">
+              <Button type="button" variant="ghost" onClick={() => router.back()} className="text-muted-foreground uppercase text-[10px] font-bold" disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? 'Submitting...' : 'Submit Incident'}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Processing...
+                  </>
+                ) : 'Submit Incident'}
               </Button>
             </CardFooter>
           </form>

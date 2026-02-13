@@ -103,6 +103,7 @@ class Incident(Base):
     assignee = relationship("User", foreign_keys=[assignee_id], back_populates="assigned_incidents")
     comments = relationship("Comment", back_populates="incident")
     audit_logs = relationship("AuditLog", back_populates="incident")
+    attachments = relationship("Attachment", back_populates="incident")
 
 class Comment(Base):
     __tablename__ = "comments"
@@ -129,3 +130,18 @@ class AuditLog(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     incident = relationship("Incident", back_populates="audit_logs")
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    incident_id = Column(UUID(as_uuid=True), ForeignKey("incidents.id"), nullable=False)
+    uploader_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    file_size = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    incident = relationship("Incident", back_populates="attachments")
+    uploader = relationship("User")

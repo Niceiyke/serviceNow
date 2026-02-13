@@ -30,6 +30,8 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { FileUploader } from '@/components/incidents/file-uploader';
+import { AttachmentList } from '@/components/incidents/attachment-list';
 import { 
   Scroll, 
   MessageSquare, 
@@ -299,7 +301,7 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                     Description
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 space-y-8">
                   {isEditing ? (
                     <Textarea 
                       value={editForm.description} 
@@ -312,6 +314,19 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
                       {incident.description}
                     </p>
                   )}
+
+                  <div className="pt-6 border-t border-primary/5 space-y-6">
+                    <AttachmentList incidentId={resolvedParams.id} canDelete={['ADMIN', 'MANAGER', 'STAFF'].includes(user?.role) || isReporter} />
+                    
+                    {!['CLOSED', 'CANCELLED'].includes(incident.status) && (
+                      <div className="max-w-md">
+                        <FileUploader 
+                          incidentId={resolvedParams.id} 
+                          onUploadSuccess={() => queryClient.invalidateQueries({ queryKey: ['attachments', resolvedParams.id] })} 
+                        />
+                      </div>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
