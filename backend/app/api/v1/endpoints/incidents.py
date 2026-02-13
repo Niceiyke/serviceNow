@@ -6,9 +6,37 @@ from app.core.database import get_db
 from app.models.models import Incident, IncidentStatus, IncidentPriority, User, UserRole, AuditLog, Department, Category, Subcategory
 from pydantic import BaseModel, UUID4
 from datetime import datetime
+from app.schemas.audit import AuditLog as AuditLogSchema
 from sqlalchemy import func
 
 router = APIRouter()
+
+@router.get("/{id}/timeline", response_model=List[AuditLogSchema])
+def read_incident_timeline(
+    id: UUID4,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    incident = db.query(Incident).filter(Incident.id == id).first()
+    if not incident:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    
+    if current_user.role == UserRole.REPORTER and incident.reporter_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    
+    logs = db.query(AuditLog).filter(AuditLog.incident_id == id).order_by(AuditLog.created_at.desc()).all()
+    
+    # Manually add actor_name if needed, or use a joinedload if relationship is set up
+    # Since I didn't add the relationship in the schema earlier, I'll fetch it or add the relationship to models.py
+    
+    results = []
+    for log in logs:
+        actor = db.query(User).filter(User.id == log.actor_id).first()
+        log_data = AuditLogSchema.from_orm(log)
+        log_data.actor_name = actor.full_name or actor.email if actor else "System"
+        results.append(log_data)
+        
+    return results
 
 @router.get("/stats")
 def get_incident_stats(
@@ -120,6 +148,16 @@ def create_incident(
     db.commit()
     db.refresh(db_obj)
     
+    # Log the creation
+    audit = AuditLog(
+        incident_id=db_obj.id,
+        actor_id=current_user.id,
+        action="CREATED",
+        new_value=db_obj.incident_key
+    )
+    db.add(audit)
+    db.commit()
+    
     db_obj = db.query(Incident).options(
         joinedload(Incident.reporter),
         joinedload(Incident.department),
@@ -194,8 +232,22 @@ def update_incident(
 
     # 1. Title/Description Updates
     if incident_update.title:
+        audit = AuditLog(
+            incident_id=incident.id,
+            actor_id=current_user.id,
+            action="TITLE_UPDATE",
+            old_value=incident.title,
+            new_value=incident_update.title
+        )
+        db.add(audit)
         incident.title = incident_update.title
     if incident_update.description:
+        audit = AuditLog(
+            incident_id=incident.id,
+            actor_id=current_user.id,
+            action="DESCRIPTION_UPDATE"
+        )
+        db.add(audit)
         incident.description = incident_update.description
     if incident_update.category_id:
         incident.category_id = incident_update.category_id

@@ -19,7 +19,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Scroll, MessageSquare, Shield, Clock, User, Landmark, Ticket } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Scroll, MessageSquare, Shield, Clock, User, Landmark, Ticket, History, ArrowRight } from 'lucide-react';
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -58,10 +59,16 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
     queryFn: async () => (await api.get(`/incidents/${resolvedParams.id}/comments`)).data,
   });
 
+  const { data: timeline = [] } = useQuery({
+    queryKey: ['timeline', resolvedParams.id],
+    queryFn: async () => (await api.get(`/incidents/${resolvedParams.id}/timeline`)).data,
+  });
+
   const updateMutation = useMutation({
     mutationFn: async (updates: any) => (await api.patch(`/incidents/${resolvedParams.id}`, updates)).data,
     onSuccess: (data) => {
       queryClient.setQueryData(['incident', resolvedParams.id], data);
+      queryClient.invalidateQueries({ queryKey: ['timeline', resolvedParams.id] });
       setIsEditing(false);
       toast.success('Incident has been updated.');
     },
@@ -107,6 +114,16 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
       case 'CLOSED': return 'bg-zinc-800 text-zinc-400 border-zinc-700/50';
       case 'CANCELLED': return 'bg-rose-900 text-rose-100 border-rose-500/50';
       default: return 'bg-zinc-800 text-zinc-400';
+    }
+  };
+
+  const getActionLabel = (action: string) => {
+    switch (action) {
+      case 'STATUS_CHANGE': return 'changed status';
+      case 'PRIORITY_CHANGE': return 'updated priority';
+      case 'ASSIGNMENT': return 'assigned the incident';
+      case 'CREATED': return 'created the incident';
+      default: return action.toLowerCase().replace('_', ' ');
     }
   };
 
@@ -199,51 +216,97 @@ export default function IncidentDetailPage({ params }: { params: Promise<{ id: s
             </motion.div>
 
             <motion.div variants={itemVariants}>
-              <Card className="border-primary/10">
-                <CardHeader className="border-b border-primary/10 bg-muted/20">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-primary" />
-                    Comments & Activity
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6 pt-6">
-                  <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
-                    {comments.length === 0 ? (
-                      <p className="text-sm text-muted-foreground italic text-center py-4">No comments posted yet.</p>
-                    ) : (
-                      comments.map((comment: any) => (
-                        <div key={comment.id} className="p-4 bg-muted/20 border border-primary/5 rounded-sm relative group">
-                          <p className="text-sm text-foreground/90 mb-2 leading-relaxed">{comment.content}</p>
-                          <div className="flex justify-between items-center opacity-60">
-                            <span className="text-[10px] uppercase font-bold flex items-center gap-1">
-                              <User className="w-3 h-3" />
-                              System User
-                            </span>
-                            <span className="text-[10px] uppercase font-bold flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {new Date(comment.created_at).toLocaleString()}
-                            </span>
-                          </div>
+              <Tabs defaultValue="comments" className="w-full">
+                <TabsList className="bg-black/20 border border-primary/10 p-1 mb-6">
+                  <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 px-6">
+                    <MessageSquare className="w-4 h-4" />
+                    Comments
+                  </TabsTrigger>
+                  <TabsTrigger value="timeline" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground gap-2 px-6">
+                    <History className="w-4 h-4" />
+                    History
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="comments" className="focus-visible:outline-none">
+                  <Card className="border-primary/10">
+                    <CardContent className="space-y-6 pt-6">
+                      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2">
+                        {comments.length === 0 ? (
+                          <p className="text-sm text-muted-foreground italic text-center py-4">No comments posted yet.</p>
+                        ) : (
+                          comments.map((comment: any) => (
+                            <div key={comment.id} className="p-4 bg-muted/20 border border-primary/5 rounded-sm relative group">
+                              <p className="text-sm text-foreground/90 mb-2 leading-relaxed">{comment.content}</p>
+                              <div className="flex justify-between items-center opacity-60">
+                                <span className="text-[10px] uppercase font-bold flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  System User
+                                </span>
+                                <span className="text-[10px] uppercase font-bold flex items-center gap-1">
+                                  <Clock className="w-3 h-3" />
+                                  {new Date(comment.created_at).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      
+                      <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(newComment); }} className="space-y-3 pt-6 border-t border-primary/10">
+                        <Textarea 
+                          placeholder="Add a comment..." 
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          className="bg-black/20 border-primary/20 focus:border-primary/40 rounded-none min-h-[100px]"
+                        />
+                        <div className="flex justify-end">
+                          <Button type="submit" disabled={commentMutation.isPending}>
+                            {commentMutation.isPending ? 'Posting...' : 'Post Comment'}
+                          </Button>
                         </div>
-                      ))
-                    )}
-                  </div>
-                  
-                  <form onSubmit={(e) => { e.preventDefault(); commentMutation.mutate(newComment); }} className="space-y-3 pt-6 border-t border-primary/10">
-                    <Textarea 
-                      placeholder="Add a comment..." 
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="bg-black/20 border-primary/20 focus:border-primary/40 rounded-none min-h-[100px]"
-                    />
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={commentMutation.isPending}>
-                        {commentMutation.isPending ? 'Posting...' : 'Post Comment'}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="timeline" className="focus-visible:outline-none">
+                  <Card className="border-primary/10">
+                    <CardContent className="pt-8 px-8">
+                      <div className="relative space-y-8 before:absolute before:inset-0 before:ml-5 before:h-full before:w-px before:bg-gradient-to-b before:from-primary/50 before:via-primary/20 before:to-transparent">
+                        {timeline.length === 0 ? (
+                          <p className="text-sm text-muted-foreground italic text-center py-4">No activity history available.</p>
+                        ) : (
+                          timeline.map((log: any) => (
+                            <div key={log.id} className="relative flex items-start gap-6 group">
+                              <div className="absolute left-0 mt-1.5 h-10 w-10 flex items-center justify-center rounded-full bg-background border border-primary/30 z-10 group-hover:border-primary group-hover:shadow-[0_0_10px_rgba(var(--primary),0.3)] transition-all">
+                                <History className="w-4 h-4 text-primary" />
+                              </div>
+                              <div className="ml-14 flex-1 pb-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1">
+                                  <span className="text-xs font-bold uppercase tracking-tight text-foreground/90">
+                                    {log.actor_name} <span className="text-primary/70 ml-1 lowercase font-medium">{getActionLabel(log.action)}</span>
+                                  </span>
+                                  <span className="text-[10px] font-mono text-muted-foreground bg-muted/30 px-2 py-0.5 rounded">
+                                    {new Date(log.created_at).toLocaleString()}
+                                  </span>
+                                </div>
+                                {log.old_value || log.new_value ? (
+                                  <div className="flex items-center gap-3 text-xs mt-2 p-2 rounded bg-primary/5 border border-primary/10 w-fit">
+                                    <span className="text-muted-foreground line-through opacity-50">{log.old_value || 'None'}</span>
+                                    <ArrowRight className="w-3 h-3 text-primary" />
+                                    <span className="font-bold text-primary">{log.new_value || 'None'}</span>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
             </motion.div>
           </div>
 
